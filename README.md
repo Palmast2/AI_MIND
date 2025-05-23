@@ -14,6 +14,9 @@ AI_MIND/
 | **Back**   | FastAPI (Python), SQLAlchemy (ORM), JWT (Autenticación)                    |
 | **DB**     | PostgreSQL, Alembic (Migraciones)                                          |
 
+## 🛠 Flujo de Trabajo
+Contribuyentes->Dev->Testing->Main
+
 ## 🚀 Configuración Inicial
 (Aquí se irán agregando las tecnologías requeridas según se van agregando al proyecto)
 
