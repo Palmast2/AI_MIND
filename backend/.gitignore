@@ -1,0 +1,56 @@
+# --- Entorno Virtual ---
+# Ignora entornos virtuales de Python (comunes en desarrollo)
+venv/
+.venv/
+env/
+ENV/
+
+# --- Dependencias de Python ---
+# Pipenv/Poetry (gestores de paquetes)
+Pipfile
+Pipfile.lock
+poetry.lock
+pyproject.toml  # (Solo ignóralo si no lo personalizas)
+
+# --- Cache y archivos generados ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+*.so
+
+# --- Logs y bases de datos locales ---
+*.log
+*.sqlite
+*.db
+*.dump
+
+# --- Configuración y entorno ---
+.env
+.env.local
+.env.test
+.venv
+.envrc
+
+# --- IDE y herramientas ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Builds y distribuciones ---
+dist/
+build/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# --- Jupyter (opcional, si usas notebooks) ---
+.ipynb_checkpoints/
+*.ipynb
+
+# --- Coverage (reportes de tests) ---
+.coverage
+htmlcov/
+coverage.xml

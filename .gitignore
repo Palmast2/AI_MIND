@@ -1,0 +1,40 @@
+# --- Global ---
+# Archivos de sistema/IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Entornos virtuales/entorno
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+logs/
+
+# --- Front (React Native) ---
+# (Lo específico se manejará en proyecto/front/.gitignore)
+
+# --- Back (Python) ---
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtualenv
+venv/
+.venv/
+
+# Builds/distribuciones
+dist/
+build/
+*.egg-info/
+
+# --- DB (PostgreSQL) ---
+# Datos/backups (no versionar)
+*.dump
+*.sqlite
+pgdata/

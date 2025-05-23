@@ -1,0 +1,16 @@
+# --- Archivos sensibles de PostgreSQL ---
+*.env                # Configuraciones con credenciales
+*.pw                 # Claves maestras o passwords
+*.key                # Archivos de cifrado
+pgpass.conf          # Archivo de contraseñas de PostgreSQL
+
+# --- Backups y datos binarios ---
+*.dump               # Volcados de DB
+*.sql                # Backups SQL (excepto migrations/)
+*.backup             
+/data/               # Carpeta de datos de PostgreSQL (si usas Docker/local)
+
+# --- Logs y temporales ---
+*.log
+*.pid
+postmaster.pid       # Archivo de bloqueo de PostgreSQL

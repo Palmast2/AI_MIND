@@ -1,0 +1,25 @@
+# Basado en: https://www.toptal.com/developers/gitignore/api/react,reactnative,node
+
+### Node ###
+node_modules/
+jspm_packages/
+.npm
+.yarn-integrity
+.pnpm-debug.log*
+
+### React Native ###
+.expo/
+__generated__/
+android/build/
+ios/build/
+*.apk
+*.aab
+
+### Entorno ###
+.env.development
+.env.production
+
+### Builds ###
+dist/
+.next/
+.nuxt/
