@@ -1,5 +1,5 @@
 para levantar el back hay que estar en la carpeta backend/
-y crear un entorno virtual con venv
+y crear un entorno virtual con venv (Version de python 3.8^)
 una vez activado el entorno virtual ejectuar:
 pip install -r requirements.txt
 para que se installe todo lo necesario para hacer funcionar el backend y utilizarlo.
