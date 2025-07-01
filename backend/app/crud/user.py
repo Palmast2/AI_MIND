@@ -5,7 +5,9 @@ from app.models.user import User
 from app.schemas.user import UserCreate
 from app.core.security import get_password_hash
 
-PGP_KEY = os.getenv("PGP_KEY")  # Usa una variable de entorno segura
+PGP_KEY = os.getenv("PGP_KEY")
+if not PGP_KEY:
+    raise RuntimeError("La variable de entorno PGP_KEY no está definida.")
 
 def get_user_by_email(db: Session, email: str):
     # Buscar usuario por email desencriptando en la consulta
@@ -16,9 +18,21 @@ def get_user_by_email(db: Session, email: str):
     """)
     result = db.execute(stmt, {"key": PGP_KEY, "email": email}).fetchone()
     if result:
-        # Mapear resultado a modelo User
-        return db.query(User).get(result.user_id)
+        db_user = db.query(User).get(result.user_id)
+        # Sobrescribe el campo email con el valor descifrado
+        db_user.email = get_decrypted_email(db, db_user.user_id)
+        return db_user
     return None
+
+def get_decrypted_email(db, user_id):
+    stmt = text("""
+        SELECT pgp_sym_decrypt(email::bytea, :key) as email
+        FROM usuarios
+        WHERE user_id = :user_id
+    """)
+    result = db.execute(stmt, {"key": PGP_KEY, "user_id": str(user_id)}).fetchone()
+    return result.email if result else None
+
 
 def create_user(db: Session, user: UserCreate):
     # Insertar usuario cifrando el email
@@ -36,4 +50,7 @@ def create_user(db: Session, user: UserCreate):
         "password_hash": get_password_hash(user.password)
     })
     db.commit()
-    return db.query(User).get(user_id)
+    db_user = db.query(User).get(user_id)
+    # Sobrescribe el campo email con el valor descifrado
+    db_user.email = get_decrypted_email(db, user_id)
+    return db_user

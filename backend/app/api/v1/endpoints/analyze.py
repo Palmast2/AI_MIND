@@ -13,10 +13,12 @@ async def analyze_text(
     """
     Analiza un texto y devuelve la emoción predominante.
 
-    Requiere autenticación mediante un token JWT válido en el encabezado Authorization.
+    **Requiere autenticación por cookies y protección CSRF:**
+    - Cookie `access_token_cookie` válida.
+    - Cookie `csrf_access_token` válida.
+    - Header `X-CSRF-TOKEN` con el valor de la cookie `csrf_access_token`.
 
     - **text**: Texto a analizar (mínimo 3 caracteres)
-    - **Authorization**: Debe incluirse el token JWT en el header como: `Bearer <access_token>`
     - **returns**: La emoción detectada, el score y detalles de todas las emociones.
     """
     # Requiere JWT

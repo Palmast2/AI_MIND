@@ -1,10 +1,10 @@
+from dotenv import load_dotenv
 import os
 from fastapi import FastAPI
-from fastapi_jwt_auth import AuthJWT
-from pydantic import BaseModel
-from dotenv import load_dotenv
 
 from app.api.v1.endpoints import analyze
+from app.api.v1.endpoints import auth
+from app.core import config
 
 # Cargar variables de entorno desde un archivo .env
 load_dotenv()
@@ -19,10 +19,8 @@ app.include_router(
     prefix="/api/v1",
     tags=["Análisis"]
 )
-
-class Settings(BaseModel):
-    authjwt_secret_key: str = os.getenv("AUTHJWT_SECRET_KEY")
-
-@AuthJWT.load_config
-def get_config():
-    return Settings()
+app.include_router(
+    auth.router,
+    prefix="/api/v1",
+    tags=["Autenticación"]
+)
