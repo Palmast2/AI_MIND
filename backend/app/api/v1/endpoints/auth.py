@@ -9,7 +9,7 @@ from google.auth.transport import requests
 from fastapi import Request
 from google.auth.exceptions import GoogleAuthError
 from app.schemas.user import UserCreate, UserLogin, UserOut
-from app.schemas.auth import TokenResponse, GoogleTokenRequest
+from app.schemas.auth import AccessResponse, GoogleTokenRequest
 from app.crud.user import get_user_by_email, create_user
 from app.core.security import verify_password
 from app.database import get_db
@@ -21,17 +21,23 @@ router = APIRouter()
 # Configuración de la ruta para autenticación con Google
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
-@router.post("/auth/google", response_model=TokenResponse)
+@router.post("/auth/google", response_model=GoogleTokenRequest)
 @limiter.limit("5/minute", key_func=get_remote_address)
 def auth_google(data: GoogleTokenRequest, request: Request, Authorize: AuthJWT = Depends()):
     """
-    Autenticación con Google OAuth2.
+    Autenticación de usuario mediante Google OAuth2.
 
-    Este endpoint recibe un token de Google enviado por el frontend, valida su autenticidad y,
-    si es válido, genera un JWT propio para la API. El JWT devuelto debe ser usado en los endpoints protegidos.
+    **Rate limiting:** 5 solicitudes por minuto por IP.
 
-    - **token**: Token de Google obtenido tras el login en el frontend.
-    - **returns**: access_token (JWT propio de la API)
+    **Request Body:**
+    - token (str): Token de Google obtenido tras el login en el frontend.
+
+    **Respuesta:**
+    - access_token (str): JWT propio de la API para autenticación posterior.
+
+    **Notas:**
+    - No requiere autenticación previa.
+    - Si el token de Google es inválido, devuelve 401.
     """
     try:
         idinfo = id_token.verify_oauth2_token(
@@ -56,16 +62,22 @@ def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
     """
     Registro de usuario con email y contraseña.
 
-    - **email**: Correo electrónico del usuario.
-    - **password**: Contraseña del usuario.
-    - **returns**: Datos del usuario registrado.
+    **Request Body:**
+    - email (str): Correo electrónico del usuario.
+    - password (str): Contraseña del usuario.
+
+    **Respuesta:**
+    - Datos del usuario registrado.
+
+    **Errores:**
+    - 400: El usuario ya existe.
     """
     db_user = get_user_by_email(db, user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="El usuario ya existe")
     return create_user(db, user)
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=AccessResponse)
 @limiter.limit("5/minute", key_func=get_remote_address)
 def login(
     user: UserLogin,
@@ -76,20 +88,22 @@ def login(
     """
     Login de usuario con email y contraseña.
 
-    - **email**: Correo electrónico del usuario.
-    - **password**: Contraseña del usuario.
+    **Request Body:**
+    - email (str): Correo electrónico del usuario.
+    - password (str): Contraseña del usuario.
 
-    **Autenticación por cookies:**
-    - Al hacer login exitoso, se setean automáticamente las siguientes cookies:
-        - `access_token_cookie`: JWT de acceso (HTTPOnly)
-        - `refresh_token_cookie`: JWT de refresh (HTTPOnly)
-        - `csrf_access_token`: Token CSRF para access (NO HTTPOnly)
-        - `csrf_refresh_token`: Token CSRF para refresh (NO HTTPOnly)
+    **Respuesta:**
+    - msg (str): Mensaje de éxito.
+    - Setea cookies: `access_token_cookie`, `refresh_token_cookie`, `csrf_access_token`, `csrf_refresh_token`.
 
-    **Uso posterior:**
+    **Errores:**
+    - 401: Credenciales inválidas.
+
+    **Notas:**
     - Para endpoints protegidos POST/PUT/DELETE, debes enviar el header `X-CSRF-TOKEN` con el valor de la cookie `csrf_access_token`.
     - Para endpoints protegidos GET, solo necesitas las cookies de acceso.
     """
+
     db_user = get_user_by_email(db, user.email)
     if not db_user or not verify_password(user.password, db_user.password_hash):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
@@ -126,7 +140,7 @@ def login(
     )
     return response
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=AccessResponse)
 @limiter.limit("10/hour")
 def refresh(request: Request, Authorize: AuthJWT = Depends()):
     """
@@ -136,15 +150,19 @@ def refresh(request: Request, Authorize: AuthJWT = Depends()):
     - Cookie `refresh_token_cookie` válida.
     - Header `X-CSRF-TOKEN` con el valor de la cookie `csrf_refresh_token`.
 
-    **Respuesta:**
-    - Setea nuevas cookies:
-        - `access_token_cookie`
-        - `csrf_access_token`
-        - `csrf_refresh_token`
-    - El body contiene el nuevo access token, esto se quitara para produccion.
+    **Rate limiting:** 10 solicitudes por hora por usuario.
 
-    **Nota:** No debes enviar el JWT en el header Authorization.
+    **Respuesta:**
+    - msg (str): Mensaje de éxito.
+    - Setea nuevas cookies: `access_token_cookie`, `csrf_access_token`, `csrf_refresh_token`.
+
+    **Errores:**
+    - 401: Token inválido o expirado.
+
+    **Notas:**
+    - No debes enviar el JWT en el header Authorization.
     """
+
     Authorize.jwt_refresh_token_required()
     current_user = Authorize.get_jwt_subject()
     new_access_token = Authorize.create_access_token(subject=current_user, expires_time=900)
@@ -178,9 +196,17 @@ def logout(request: Request, response: Response):
     """
     Cierra la sesión del usuario.
 
-    - Elimina las cookies de autenticación (`access_token_cookie`, `refresh_token_cookie`).
+    **Requiere:**
+    - Cookies de autenticación válidas.
+
+    **Respuesta:**
+    - msg (str): Mensaje de éxito.
+
+    **Notas:**
+    - Elimina las cookies de autenticación (`access_token_cookie`, `refresh_token_cookie`, `csrf_access_token`, `csrf_refresh_token`).
     - El usuario debe volver a autenticarse para acceder a endpoints protegidos.
     """
+
     response.delete_cookie("access_token_cookie")
     response.delete_cookie("refresh_token_cookie")
     response.delete_cookie("csrf_access_token")
@@ -195,7 +221,13 @@ def protected(Authorize: AuthJWT = Depends()):
     **Requiere:**
     - Cookie `access_token_cookie` válida.
 
-    **No requiere header CSRF.**
+    **Respuesta:**
+    - msg (str): Mensaje de acceso permitido.
+
+    **Notas:**
+    - No requiere header CSRF.
+    - Solo para pruebas, eliminar en producción.
     """
+
     Authorize.jwt_required()
     return {"msg": "¡Acceso permitido con cookie JWT!"}

@@ -22,8 +22,14 @@ async def analyze_text(
     - Cookie `csrf_access_token` válida.
     - Header `X-CSRF-TOKEN` con el valor de la cookie `csrf_access_token`.
 
-    - **text**: Texto a analizar (mínimo 3 caracteres)
-    - **returns**: La emoción detectada, el score y detalles de todas las emociones.
+    **Request Body:**
+    - text (str): Texto a analizar (mínimo 3 caracteres).
+
+    **Respuesta:**
+    - emotion (str): Emoción detectada.
+    - score (float): Puntaje de confianza.
+    - details (dict): Detalles de todas las emociones detectadas.
+    - error (str, opcional): Mensaje de error si ocurre algún problema.
     """
     # Requiere JWT
     Authorize.jwt_required()
