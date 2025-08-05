@@ -6,12 +6,15 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from google.oauth2 import id_token
 from google.auth.transport import requests
+from fastapi import Request
 from google.auth.exceptions import GoogleAuthError
 from app.schemas.user import UserCreate, UserLogin, UserOut
 from app.schemas.auth import TokenResponse, GoogleTokenRequest
 from app.crud.user import get_user_by_email, create_user
 from app.core.security import verify_password
 from app.database import get_db
+from slowapi.util import get_remote_address
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 
@@ -19,7 +22,8 @@ router = APIRouter()
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 @router.post("/auth/google", response_model=TokenResponse)
-def auth_google(data: GoogleTokenRequest, Authorize: AuthJWT = Depends()):
+@limiter.limit("5/minute", key_func=get_remote_address)
+def auth_google(data: GoogleTokenRequest, request: Request, Authorize: AuthJWT = Depends()):
     """
     Autenticación con Google OAuth2.
 
@@ -47,7 +51,8 @@ def auth_google(data: GoogleTokenRequest, Authorize: AuthJWT = Depends()):
     return {"access_token": access_token}
 
 @router.post("/register", response_model=UserOut)
-def register(user: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("3/minute", key_func=get_remote_address)
+def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
     """
     Registro de usuario con email y contraseña.
 
@@ -61,7 +66,13 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     return create_user(db, user)
 
 @router.post("/login", response_model=TokenResponse)
-def login(user: UserLogin, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("5/minute", key_func=get_remote_address)
+def login(
+    user: UserLogin,
+    request: Request,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+    ):
     """
     Login de usuario con email y contraseña.
 
@@ -84,7 +95,7 @@ def login(user: UserLogin, Authorize: AuthJWT = Depends(), db: Session = Depends
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     access_token = Authorize.create_access_token(subject=str(db_user.user_id), expires_time=900)  # 15 minutos
     refresh_token = Authorize.create_refresh_token(subject=str(db_user.user_id), expires_time=86400)  # 1 día
-    response = JSONResponse(content={"access_token": access_token}) #Reemplazar el token con un mensaje en produccion
+    response = JSONResponse(content={"msg": "Login exitoso"})
     response.set_cookie(
         key="access_token_cookie",
         value=access_token,
@@ -116,7 +127,8 @@ def login(user: UserLogin, Authorize: AuthJWT = Depends(), db: Session = Depends
     return response
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(Authorize: AuthJWT = Depends()):
+@limiter.limit("10/hour")
+def refresh(request: Request, Authorize: AuthJWT = Depends()):
     """
     Renueva el access token usando el refresh token (en cookie).
 
@@ -136,7 +148,7 @@ def refresh(Authorize: AuthJWT = Depends()):
     Authorize.jwt_refresh_token_required()
     current_user = Authorize.get_jwt_subject()
     new_access_token = Authorize.create_access_token(subject=current_user, expires_time=900)
-    response = JSONResponse(content={"access_token": new_access_token}) #Reemplazar el token con un mensaje en produccion
+    response = JSONResponse(content={"msg": "Token renovado"})
     response.set_cookie(
         key="access_token_cookie",
         value=new_access_token,
@@ -161,7 +173,8 @@ def refresh(Authorize: AuthJWT = Depends()):
     return response
 
 @router.post("/logout")
-def logout(response: Response):
+@limiter.limit("10/hour")
+def logout(request: Request, response: Response):
     """
     Cierra la sesión del usuario.
 

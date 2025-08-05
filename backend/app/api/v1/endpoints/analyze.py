@@ -2,12 +2,16 @@ from fastapi import APIRouter, Depends
 from fastapi_jwt_auth import AuthJWT
 from app.core.ml_models import predict_emotion
 from app.schemas.emotion import EmotionResponse, AnalyzeRequest
+from app.core.rate_limit import limiter
+from fastapi import Request
 
 router = APIRouter()
 
 @router.post("/analyze", response_model=EmotionResponse)
+@limiter.limit("100/hour")
 async def analyze_text(
-    request: AnalyzeRequest,
+    request: Request,
+    request_analyze: AnalyzeRequest,
     Authorize: AuthJWT = Depends()
 ):
     """
@@ -24,7 +28,7 @@ async def analyze_text(
     # Requiere JWT
     Authorize.jwt_required()
     
-    text = request.text
+    text = request_analyze.text
     
     if len(text) < 3:
         return {"error": "El texto es demasiado corto"}

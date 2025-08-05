@@ -49,7 +49,7 @@ VALUES
  pgp_sym_encrypt('No fomentar aislamiento digital, evitar sugerencias que aumenten la desconexión real.', 'TU_CLAVE_AQUI'),
  pgp_sym_encrypt('{"nadie", "abandonado"}', 'TU_CLAVE_AQUI')),
 
-('frustración', 'Fomenta aceptación, reformulación cognitiva y pausas activas.',
+('frustracion', 'Fomenta aceptación, reformulación cognitiva y pausas activas.',
  'Romper una hoja de papel, escuchar música, hacer estiramientos.',
  NULL,
  pgp_sym_encrypt('Evitar frases como "no te quejes", no minimizar el esfuerzo previo.', 'TU_CLAVE_AQUI'),
@@ -61,7 +61,7 @@ VALUES
  pgp_sym_encrypt('Evitar exponer al miedo sin preparación; no invalidar con "no pasa nada".', 'TU_CLAVE_AQUI'),
  pgp_sym_encrypt('{"no salgas", "te van a hacer daño"}', 'TU_CLAVE_AQUI')),
 
-('confusión', 'Ofrece validación emocional, clarificación y acompañamiento paso a paso.',
+('confusion', 'Ofrece validación emocional, clarificación y acompañamiento paso a paso.',
  'Hacer una lista de ideas, hablar con alguien de confianza, escribir dudas.',
  NULL,
  pgp_sym_encrypt('Evitar saturar de información o decisiones inmediatas.', 'TU_CLAVE_AQUI'),
@@ -79,7 +79,7 @@ VALUES
  pgp_sym_encrypt('Evitar invalidar con frases como "todo estará bien"; requiere validación profunda.', 'TU_CLAVE_AQUI'),
  pgp_sym_encrypt('{"nunca mejora", "sin salida"}', 'TU_CLAVE_AQUI')),
 
-('vergüenza', 'Fomenta autoaceptación, apoyo social y reducción del juicio.',
+('verguenza', 'Fomenta autoaceptación, apoyo social y reducción del juicio.',
  'Escribir sobre logros, hablar con alguien de confianza, mirar al espejo con afirmaciones.',
  NULL,
  pgp_sym_encrypt('Evitar comparaciones con otros, no reforzar juicios.', 'TU_CLAVE_AQUI'),
@@ -91,7 +91,7 @@ VALUES
  pgp_sym_encrypt('Evitar alimentar impulsividad o conductas riesgosas; mantener enfoque realista.', 'TU_CLAVE_AQUI'),
  pgp_sym_encrypt('{"soy invencible", "todo es perfecto"}', 'TU_CLAVE_AQUI')),
 
-('apatía', 'Promueve activación conductual con tareas simples y significativas.',
+('apatia', 'Promueve activación conductual con tareas simples y significativas.',
  'Levantarse de la cama, tomar agua, vestirse, poner música suave.',
  NULL,
  pgp_sym_encrypt('Evitar discursos motivacionales vacíos, empezar con metas mínimas.', 'TU_CLAVE_AQUI'),
@@ -103,19 +103,19 @@ VALUES
  pgp_sym_encrypt('Evitar frases como "ya supéralo", permitir el tiempo necesario para el duelo.', 'TU_CLAVE_AQUI'),
  pgp_sym_encrypt('{"lo perdí", "no está"}', 'TU_CLAVE_AQUI')),
 
-('autoagresión', 'Activa red de apoyo, contacta a profesional y enfatiza cuidado inmediato.',
+('autoagresion', 'Activa red de apoyo, contacta a profesional y enfatiza cuidado inmediato.',
  NULL,
  'Quitar objetos peligrosos del entorno, llamar a alguien de confianza o profesional.',
  pgp_sym_encrypt('Nunca validar la autoagresión, evitar ambigüedad en mensajes; intervenir con urgencia.', 'TU_CLAVE_AQUI'),
  pgp_sym_encrypt('{"me corté", "daño", "me quiero morir"}', 'TU_CLAVE_AQUI')),
 
-('depresión leve', 'Sugiere ejercicio leve, rutina diaria y conexión social.',
+('depresion leve', 'Sugiere ejercicio leve, rutina diaria y conexión social.',
  'Hacer la cama, caminar 5 minutos, responder mensajes pendientes.',
  NULL,
  pgp_sym_encrypt('No hacer de la gamificación el centro de la experiencia; evitar el aislamiento.', 'TU_CLAVE_AQUI'),
  pgp_sym_encrypt('{"sin ganas", "me cuesta", "aislado"}', 'TU_CLAVE_AQUI')),
 
-('crisis emocional / ideación suicida', 'Activa primeros auxilios emocionales, evalúa entorno y deriva a especialistas.',
+('crisis emocional / ideacion suicida', 'Activa primeros auxilios emocionales, evalúa entorno y deriva a especialistas.',
  NULL,
  'No dejar a la persona sola. Contactar a profesionales o servicios de emergencia.',
  pgp_sym_encrypt('El bot no debe sustituir intervención profesional; activar red de apoyo.', 'TU_CLAVE_AQUI'),
