@@ -25,6 +25,20 @@ async def chat_gpt(
     """
     Genera una respuesta empática basada en el mensaje del usuario y su emoción detectada.
     Guarda todo el historial en base de datos y lo reconstruye en cada petición.
+
+    **Requiere autenticación por cookies y protección CSRF:**
+    - Cookie `access_token_cookie` válida.
+    - Cookie `csrf_access_token` válida.
+    - Header `X-CSRF-TOKEN` con el valor de la cookie `csrf_access_token`.
+
+    **Request Body:**
+    - user_message (str): Mensaje enviado por el usuario.
+
+    **Respuesta:**
+    - prompt (str): Prompt generado para el modelo.
+    - response (dict): Respuesta generada por el modelo.
+    - error (str, opcional): Mensaje de error si ocurre algún problema.
+    
     """
 
     # Verifica JWT y obtiene ID del usuario autenticado

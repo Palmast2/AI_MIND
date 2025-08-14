@@ -39,5 +39,4 @@ build/
 *.sqlite
 pgdata/
 backend/.env.example
-backend/env
-backend/app/core/rate_limit.py
+backend/.env
