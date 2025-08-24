@@ -21,7 +21,7 @@ router = APIRouter()
 # Configuración de la ruta para autenticación con Google
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
-@router.post("/auth/google", response_model=GoogleTokenRequest)
+@router.post("/auth/google", response_model=AccessResponse)
 @limiter.limit("5/minute", key_func=get_remote_address)
 def auth_google(data: GoogleTokenRequest, request: Request, Authorize: AuthJWT = Depends()):
     """
@@ -89,9 +89,9 @@ def auth_google(data: GoogleTokenRequest, request: Request, Authorize: AuthJWT =
     )
     return response
 
-@router.post("/register", response_model=UserOut)
+@router.post("/register", response_model=AccessResponse)
 @limiter.limit("3/minute", key_func=get_remote_address)
-def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
+def register(user: UserCreate, request: Request, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """
     Registro de usuario con email y contraseña.
 
@@ -101,6 +101,7 @@ def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
 
     **Respuesta:**
     - Datos del usuario registrado.
+    - Setea cookies: `access_token_cookie`, `refresh_token_cookie`, `csrf_access_token`, `csrf_refresh_token`.
 
     **Errores:**
     - 400: El usuario ya existe.
@@ -108,7 +109,41 @@ def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
     db_user = get_user_by_email(db, user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="El usuario ya existe")
-    return create_user(db, user)
+    new_user = create_user(db, user)
+
+    # Generar tokens y setear cookies igual que en login
+    access_token = Authorize.create_access_token(subject=str(new_user.user_id), expires_time=900)
+    refresh_token = Authorize.create_refresh_token(subject=str(new_user.user_id), expires_time=86400)
+    response = JSONResponse(content={"msg": "Registro exitoso"})
+    response.set_cookie(
+        key="access_token_cookie",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Cambia a True en producción
+        samesite="strict"
+    )
+    response.set_cookie(
+        key="refresh_token_cookie",
+        value=refresh_token,
+        httponly=True,
+        secure=False,  # Cambia a True en producción
+        samesite="strict"
+    )
+    response.set_cookie(
+        key="csrf_access_token",
+        value=Authorize._get_csrf_token(access_token),
+        httponly=False,
+        secure=False,  # Cambia a True en producción
+        samesite="strict"
+    )
+    response.set_cookie(
+        key="csrf_refresh_token",
+        value=Authorize._get_csrf_token(refresh_token),
+        httponly=False,
+        secure=False,  # Cambia a True en producción
+        samesite="strict"
+    )
+    return response
 
 @router.post("/login", response_model=AccessResponse)
 @limiter.limit("5/minute", key_func=get_remote_address)
