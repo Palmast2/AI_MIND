@@ -222,7 +222,7 @@ def refresh(request: Request, Authorize: AuthJWT = Depends()):
 
     **Respuesta:**
     - msg (str): Mensaje de éxito.
-    - Setea nuevas cookies: `access_token_cookie`, `csrf_access_token`, `csrf_refresh_token`.
+    - Setea nuevas cookies: `access_token_cookie`, `csrf_access_token`.
 
     **Errores:**
     - 401: Token inválido o expirado.
@@ -245,13 +245,6 @@ def refresh(request: Request, Authorize: AuthJWT = Depends()):
     response.set_cookie(
         key="csrf_access_token",
         value=Authorize._get_csrf_token(new_access_token),
-        httponly=False,
-        secure=False,  # Cambia a True en producción
-        samesite="strict"
-    )
-    response.set_cookie(
-        key="csrf_refresh_token",
-        value=Authorize._get_csrf_token(Authorize._token_from_cookies("refresh")),
         httponly=False,
         secure=False,  # Cambia a True en producción
         samesite="strict"
@@ -280,22 +273,3 @@ def logout(request: Request, response: Response):
     response.delete_cookie("csrf_access_token")
     response.delete_cookie("csrf_refresh_token")
     return {"msg": "Sesión cerrada"}
-
-@router.get("/protected") # Endpoint protegido para verificar el acceso con JWT se borrara en produccion
-def protected(Authorize: AuthJWT = Depends()):
-    """
-    Endpoint protegido de prueba.
-
-    **Requiere:**
-    - Cookie `access_token_cookie` válida.
-
-    **Respuesta:**
-    - msg (str): Mensaje de acceso permitido.
-
-    **Notas:**
-    - No requiere header CSRF.
-    - Solo para pruebas, eliminar en producción.
-    """
-
-    Authorize.jwt_required()
-    return {"msg": "¡Acceso permitido con cookie JWT!"}

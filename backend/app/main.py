@@ -1,13 +1,14 @@
 from dotenv import load_dotenv
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
-from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1.endpoints import analyze
-from app.api.v1.endpoints import auth
-from app.api.v1.endpoints import chat
+from fastapi_jwt_auth.exceptions import AuthJWTException, JWTDecodeError
+
+from app.api.v1.endpoints import analyze, auth, chat
 from app.core import config
 from app.core.rate_limit import limiter
 
@@ -22,6 +23,23 @@ app = FastAPI(
 # Configuración de rate limit
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Exception handlers para autenticación JWT
+@app.exception_handler(AuthJWTException)
+def authjwt_exception_handler(request: Request, exc: AuthJWTException):
+    # 401 para problemas de autenticación (incluye expiración)
+    return JSONResponse(
+        status_code=exc.status_code if exc.status_code in [401, 422] else 401,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(JWTDecodeError)
+def jwtdecode_exception_handler(request: Request, exc: JWTDecodeError):
+    # 401 para token expirado o inválido
+    return JSONResponse(
+        status_code=401,
+        content={"detail": exc.message}
+    )
 
 # Configuración de CORS
 app.add_middleware(
