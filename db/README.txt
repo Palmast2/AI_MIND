@@ -17,4 +17,5 @@ pip install openai
 pip install reportlab
 
 
-Teniendo la base de datos cuando mandes un mensaje en /chat se guardara en la db
+Teniendo la base de datos cuando mandes un mensaje en /chat se guardara en la db y tambien en algunos casos 
+extremos se guardan algunos mensajes del usuario en eventos criticos
