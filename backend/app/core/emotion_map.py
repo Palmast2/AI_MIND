@@ -1,3 +1,5 @@
+from .risk_detector import detectar_crisis
+
 EMOTION_MAP = {
     "anger": "enojo",
     "disgust": "asco",
@@ -30,9 +32,13 @@ EXTENDED_MAP = {
     # ...agrega más si tu DB crece
 }
 
-def map_emotion(emotion_result):
+def map_emotion(emotion_result, user_message=None):
     from .emotion_map import EMOTION_MAP, EXTENDED_MAP
 
+    # 0. Si el mensaje contiene indicadores de crisis
+    if user_message and detectar_crisis(user_message):
+        return "crisis emocional / ideacion suicida"
+        
     # 1. Si la emoción principal está en EMOTION_MAP, úsala
     main_emotion = emotion_result.get("emotion")
     if main_emotion in EMOTION_MAP:

@@ -11,6 +11,7 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.core.rate_limit import limiter
 from app.crud.message import guardar_mensaje, obtener_historial_usuario
 from app.core.chat_history import build_prompt
+from app.crud.eventos import guardar_evento 
 
 router = APIRouter()
 
@@ -48,14 +49,14 @@ async def chat_gpt(
     # 1️⃣ Detectar emoción principal
     user_message = chat_request.user_message
     emotion_result = predict_emotion(user_message)
-    emocion_detectada = map_emotion(emotion_result)
+    emocion_detectada = map_emotion(emotion_result, user_message=user_message)
 
     # 2️⃣ Consultar técnicas y advertencias en base de datos
     tecnicas_recomendadas = obtener_tecnicas(emocion_detectada, db)
     advertencias = obtener_advertencias(emocion_detectada, db)
 
     # 3️⃣ Guardar mensaje del usuario en DB
-    guardar_mensaje(
+    message_id = guardar_mensaje(
         db=db,
         user_id=user_id,
         role="user",
@@ -63,6 +64,18 @@ async def chat_gpt(
         emocion_detectada=emocion_detectada,
         modelo_utilizado="usuario"
     )
+
+    # 🚨 3 Si emoción es crítica -> guardar también en eventos_criticos
+    if emocion_detectada in ["autoagresion", "crisis emocional / ideacion suicida"]:
+        guardar_evento(
+            db=db,
+            user_id=user_id,
+            message_id=message_id,
+            tipo_evento=emocion_detectada,
+            descripcion=user_message,
+            nivel_alerta="alto",
+            atendido=False
+        )
 
     # 4️⃣ Construir prompt con historial y contexto emocional
     prompt = build_prompt(db, user_id, emocion_detectada, tecnicas_recomendadas, advertencias)

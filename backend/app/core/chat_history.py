@@ -1,4 +1,3 @@
-# app/core/chat_history.py
 import os
 from app.crud.message import guardar_mensaje
 from sqlalchemy import text
