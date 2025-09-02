@@ -63,28 +63,28 @@ def auth_google(data: GoogleTokenRequest, request: Request, Authorize: AuthJWT =
         key="access_token_cookie",
         value=access_token,
         httponly=True,
-        secure=False, # Cambia a True en producción
+        secure=True, # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="refresh_token_cookie",
         value=refresh_token,
         httponly=True,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="csrf_access_token",
         value=Authorize._get_csrf_token(access_token),
         httponly=False,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="csrf_refresh_token",
         value=Authorize._get_csrf_token(refresh_token),
         httponly=False,
-        secure=False, # Cambia a True en producción
+        secure=True, # Cambia a True en producción
         samesite="strict"
     )
     return response
@@ -119,28 +119,28 @@ def register(user: UserCreate, request: Request, Authorize: AuthJWT = Depends(),
         key="access_token_cookie",
         value=access_token,
         httponly=True,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="refresh_token_cookie",
         value=refresh_token,
         httponly=True,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="csrf_access_token",
         value=Authorize._get_csrf_token(access_token),
         httponly=False,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="csrf_refresh_token",
         value=Authorize._get_csrf_token(refresh_token),
         httponly=False,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     return response
@@ -182,28 +182,28 @@ def login(
         key="access_token_cookie",
         value=access_token,
         httponly=True,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="refresh_token_cookie",
         value=refresh_token,
         httponly=True,  # Cambia a True en producción
-        secure=False,
+        secure=True,
         samesite="strict"
     )
     response.set_cookie(
         key="csrf_access_token",
         value=Authorize._get_csrf_token(access_token),
         httponly=False,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="csrf_refresh_token",
         value=Authorize._get_csrf_token(refresh_token),
         httponly=False,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     return response
@@ -239,14 +239,14 @@ def refresh(request: Request, Authorize: AuthJWT = Depends()):
         key="access_token_cookie",
         value=new_access_token,
         httponly=True,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     response.set_cookie(
         key="csrf_access_token",
         value=Authorize._get_csrf_token(new_access_token),
         httponly=False,
-        secure=False,  # Cambia a True en producción
+        secure=True,  # Cambia a True en producción
         samesite="strict"
     )
     return response

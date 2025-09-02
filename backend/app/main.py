@@ -45,8 +45,9 @@ def jwtdecode_exception_handler(request: Request, exc: JWTDecodeError):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Para desarrollo
-        "https://tudominio.com"   # Para producción
+        #"http://localhost:3000",  # Para desarrollo
+        #"https://tudominio.com"   # Para producción
+        "https://api.aimind.portablelab.work"
     ],
     allow_credentials=True,
     allow_methods=["*"],
