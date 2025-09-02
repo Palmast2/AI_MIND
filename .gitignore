@@ -38,3 +38,6 @@ build/
 *.dump
 *.sqlite
 pgdata/
+backend/.env.example
+backend/.env
+backend/env
