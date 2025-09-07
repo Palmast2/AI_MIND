@@ -63,7 +63,7 @@ def auth_google(data: GoogleTokenRequest, request: Request, Authorize: AuthJWT =
         key="access_token_cookie",
         value=access_token,
         httponly=True,
-        secure=True, # Cambia a True en producción
+        secure=True,
         samesite="strict"
     )
     response.set_cookie(
