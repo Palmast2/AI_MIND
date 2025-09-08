@@ -8,9 +8,8 @@ from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter()
 
-@router.get("/pdf/{user_id}/{year}/{month}")
-def generar_pdf_por_mes(
-    user_id: str, 
+@router.get("/pdf/{year}/{month}")
+def generar_pdf_por_mes( 
     year: int, 
     month: int, 
     db: Session = Depends(get_db),
@@ -25,7 +24,6 @@ def generar_pdf_por_mes(
     - Header `X-CSRF-TOKEN` con el valor de la cookie `csrf_access_token`.
 
     **Parámetros de ruta:**
-    - user_id (str): Identificador único del usuario (ignorado, se usa el del JWT).
     - year (int): Año del reporte (ej. 2025).
     - month (int): Mes del reporte (1-12).
 
@@ -44,9 +42,8 @@ def generar_pdf_por_mes(
         raise HTTPException(status_code=404, detail="No hay historial de mensajes para este usuario en ese mes")
     return FileResponse(file_path, media_type="application/pdf", filename=file_path.split("/")[-1])
 
-@router.get("/meses/{user_id}")
+@router.get("/meses")
 def meses_disponibles(
-    user_id: str, 
     db: Session = Depends(get_db),
     Authorize: AuthJWT = Depends()
     ):
@@ -57,9 +54,6 @@ def meses_disponibles(
     - Cookie `access_token_cookie` válida.
     - Cookie `csrf_access_token` válida.
     - Header `X-CSRF-TOKEN` con el valor de la cookie `csrf_access_token`.
-
-    **Parámetros de ruta:**
-    - user_id (str): Identificador único del usuario (ignorado, se usa el del JWT).
 
     **Respuesta:**
     ```json
