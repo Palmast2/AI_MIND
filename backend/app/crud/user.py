@@ -20,7 +20,7 @@ def get_user_by_email(db: Session, email: str):
     if result:
         db_user = db.query(User).get(result.user_id)
         # Sobrescribe el campo email con el valor descifrado
-        db_user.email = get_decrypted_email(db, db_user.user_id)
+        #db_user.email = get_decrypted_email(db, db_user.user_id)
         return db_user
     return None
 
@@ -52,5 +52,14 @@ def create_user(db: Session, user: UserCreate):
     db.commit()
     db_user = db.query(User).get(user_id)
     # Sobrescribe el campo email con el valor descifrado
-    db_user.email = get_decrypted_email(db, user_id)
+    #db_user.email = get_decrypted_email(db, user_id)
     return db_user
+
+def update_user_password(db: Session, user_id, new_password_hash: str):
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if user:
+        user.password_hash = new_password_hash
+        db.commit()
+        db.refresh(user)
+        return user
+    return None
