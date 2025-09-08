@@ -21,5 +21,5 @@ Teniendo la base de datos cuando mandes un mensaje en /chat se guardara en la db
 extremos se guardan algunos mensajes del usuario en eventos criticos
 
 Para poder usar los reportes deberia de verse la ruta asi:
-ejem: /api/v1/pdf/{user_id}/2025/8
-ejem: /api/v1/meses/{user_id}
+ejem: /api/v1/pdf/2025/8
+ejem: /api/v1/meses
