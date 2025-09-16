@@ -12,6 +12,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareFlatList } from 'react-native-keyboard-aware-scroll-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+
+import { SKINS, STORAGE_KEY } from "./skins"; // 👈 importa el mapa compartido
 
 type Msg = { id: string; role: 'user' | 'assistant'; text: string };
 
@@ -24,6 +27,10 @@ export default function ChatScreen({ route }: any) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+
+   // 👇 Estado para la skin
+  const [skinKey, setSkinKey] = useState<keyof typeof SKINS>('default');
+  const [remoteUri, setRemoteUri] = useState<string | null>(null);
 
   const listRef = useRef<KeyboardAwareFlatList<Msg>>(null);
   const inputRef = useRef<TextInput>(null);
@@ -51,6 +58,53 @@ export default function ChatScreen({ route }: any) {
   }, []);
 
   const handleBlur = useCallback(() => setIsFocused(false), []);
+
+  // ====== LÓGICA DE SKINS ======
+  const isRemoteValue = (v: string) =>
+    /^https?:\/\//i.test(v) || /^file:\/\//i.test(v);
+
+  // Cargar/recargar skin al enfocar (útil al volver de SkinsScreen)
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const saved = await AsyncStorage.getItem(STORAGE_KEY);
+          if (!active) return;
+
+          if (!saved) {
+            setSkinKey('default');
+            setRemoteUri(null);
+            return;
+          }
+
+          if (isRemoteValue(saved)) {
+            setRemoteUri(saved);
+            setSkinKey('default'); // clave no se usa cuando hay URI
+          } else if ((SKINS as any)[saved]) {
+            setSkinKey(saved as keyof typeof SKINS);
+            setRemoteUri(null);
+          } else {
+            setSkinKey('default');
+            setRemoteUri(null);
+          }
+        } catch {
+          setSkinKey('default');
+          setRemoteUri(null);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  // Fuente para el avatar del asistente
+  const imageSource = useMemo(() => {
+    if (remoteUri) return { uri: remoteUri };
+    return SKINS[skinKey] ?? SKINS.default;
+  }, [skinKey, remoteUri]);
 
   // Mock de API — reemplaza por tu fetch real
   const callAPI = async (userMessage: string): Promise<string> => {
@@ -135,7 +189,7 @@ export default function ChatScreen({ route }: any) {
     return (
       <View className="my-1 max-w-[85%] flex-row items-end gap-2 self-start">
         <Image
-          source={require('../assets/cat-pixel.png')}
+          source={imageSource}
           style={{ width: 48, height: 48, borderRadius: 14 }}
           resizeMode="contain"
         />

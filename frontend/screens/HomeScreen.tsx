@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useLayoutEffect } from "react";
 import {
   View,
   Image,
@@ -6,37 +6,97 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   findNodeHandle,
+  Text,
+  TouchableOpacity,
+  Platform,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-// 👇 recibe navigation desde React Navigation
+import { SKINS, STORAGE_KEY } from "./skins";
+
 export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [isFocused, setIsFocused] = useState(false);
-
-  // 👇 estado para el texto
   const [text, setText] = useState("");
+
+  const [skinKey, setSkinKey] = useState<string>("default");
+  const [remoteUri, setRemoteUri] = useState<string | null>(null);
 
   const scrollRef = useRef<any>(null);
   const inputRef = useRef<any>(null);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Skins")}
+          style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "600" }}>Skins</Text>
+        </TouchableOpacity>
+      ),
+      headerStyle: { backgroundColor: "#00634C" },
+      headerTitleStyle: { color: "#fff" },
+      headerTintColor: "#fff",
+    });
+  }, [navigation]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      (async () => {
+        try {
+          const saved = await AsyncStorage.getItem(STORAGE_KEY);
+          if (!isActive) return;
+          if (!saved) {
+            setSkinKey("default");
+            setRemoteUri(null);
+            return;
+          }
+          if (/^https?:\/\//i.test(saved) || /^file:\/\//i.test(saved)) {
+            setRemoteUri(saved);
+            setSkinKey("default");
+          } else if ((SKINS as any)[saved]) {
+            setSkinKey(saved);
+            setRemoteUri(null);
+          } else {
+            setSkinKey("default");
+            setRemoteUri(null);
+          }
+        } catch {
+          setSkinKey("default");
+          setRemoteUri(null);
+        }
+      })();
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  const imageSource = useMemo(() => {
+    if (remoteUri) return { uri: remoteUri };
+    return SKINS[skinKey] ?? SKINS.default;
+  }, [skinKey, remoteUri]);
 
   const handleFocus = () => {
     setIsFocused(true);
     requestAnimationFrame(() => {
       const node = findNodeHandle(inputRef.current);
-      scrollRef.current?.scrollToFocusedInput(node);
+      scrollRef.current?.scrollToFocusedInput?.(node);
     });
   };
 
   const handleBlur = () => setIsFocused(false);
 
-  // 👇 cuando se “envía” el input
   const handleSend = () => {
     const msg = text.trim();
     if (!msg) return;
     Keyboard.dismiss();
-    navigation.navigate("Chat", { initialMessage: msg }); // ← cambia de vista y pasa el texto
+    navigation.navigate("Chat", { initialMessage: msg });
     setText("");
   };
 
@@ -45,26 +105,31 @@ export default function HomeScreen({ navigation }: any) {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAwareScrollView
           ref={scrollRef}
+          style={{ flex: 1 }}
           contentContainerStyle={{
             flexGrow: 1,
             paddingTop: 16,
             paddingHorizontal: 16,
-            paddingBottom: insets.bottom + 24,
+            // 👇 cuando está enfocado, NO agregues padding inferior grande
+            paddingBottom: isFocused ? 8 : insets.bottom + 16,
           }}
           enableOnAndroid
-          enableAutomaticScroll
+          // 👇 evita el doble desplazamiento (usamos scrollToFocusedInput manual)
+          enableAutomaticScroll={false}
+          enableResetScrollToCoords={false}
           keyboardOpeningTime={0}
           keyboardShouldPersistTaps="handled"
-          extraScrollHeight={isFocused ? 160 : 60}
-          extraHeight={isFocused ? 120 : 24}
+          // 👇 reduce mucho estos valores (evita “hoyo” al fondo)
+          extraScrollHeight={12}
+          extraHeight={0}
           showsVerticalScrollIndicator={false}
-          keyboardDismissMode="interactive"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
         >
-          <View style={{ flex: 1, justifyContent: "space-between" }}>
+          <View style={{ flex: 1 }}>
             {/* Imagen */}
             <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
               <Image
-                source={require("../assets/cat-pixel.png")}
+                source={imageSource}
                 style={{ width: 300, height: 300 }}
                 resizeMode="contain"
               />
@@ -83,6 +148,8 @@ export default function HomeScreen({ navigation }: any) {
                 shadowOpacity: 0.1,
                 shadowRadius: 4,
                 elevation: 3,
+                // 👇 separa del borde inferior sin exagerar
+                marginBottom: 8,
               }}
             >
               <TextInput
@@ -96,18 +163,17 @@ export default function HomeScreen({ navigation }: any) {
                   maxHeight: 140,
                   textAlignVertical: "top",
                 }}
-                // 👇 controlar el valor
                 value={text}
                 onChangeText={setText}
                 multiline
-                numberOfLines={isFocused ? 4 : 1}
+                // 👇 evita cambiar dinámicamente las líneas (causa re-layouts grandes)
+                numberOfLines={1}
                 scrollEnabled
                 returnKeyType="send"
-                blurOnSubmit={true}          // ← necesario para que onSubmitEditing dispare con multiline
-                onSubmitEditing={handleSend} // ← navegar al Chat con el mensaje
+                blurOnSubmit={true}
+                onSubmitEditing={handleSend}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                // Fallback Android si algún teclado inserta salto de línea en vez de enviar
                 onKeyPress={({ nativeEvent }) => {
                   if (nativeEvent.key === "Enter") {
                     handleSend();
