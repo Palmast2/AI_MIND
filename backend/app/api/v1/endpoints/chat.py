@@ -9,8 +9,8 @@ from app.core.ml_models import predict_emotion
 from app.core.emotion_map import map_emotion
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.core.rate_limit import limiter
-from app.crud.message import guardar_mensaje, obtener_historial_usuario
-from app.core.chat_history import build_prompt
+from app.crud.message import obtener_historial_usuario
+from app.core.chat_history import build_prompt, guardar_mensaje_historial
 from app.crud.eventos import guardar_evento 
 
 router = APIRouter()
@@ -56,11 +56,11 @@ async def chat_gpt(
     advertencias = obtener_advertencias(emocion_detectada, db)
 
     # 3️⃣ Guardar mensaje del usuario en DB
-    message_id = guardar_mensaje(
+    message_id = guardar_mensaje_historial(
         db=db,
         user_id=user_id,
         role="user",
-        contenido=user_message,
+        content=user_message,
         emocion_detectada=emocion_detectada,
         modelo_utilizado="usuario"
     )
@@ -95,11 +95,11 @@ async def chat_gpt(
         assistant_content = gpt_response["choices"][0]["message"]["content"]
 
         # 8️⃣ Guardar respuesta de la IA en DB
-        guardar_mensaje(
+        guardar_mensaje_historial(
             db=db,
             user_id=user_id,
             role="assistant",
-            contenido=assistant_content,
+            content=assistant_content,
             emocion_detectada=emocion_detectada,
             modelo_utilizado="gpt-4"
         )

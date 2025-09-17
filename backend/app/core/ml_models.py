@@ -15,7 +15,7 @@ def get_emotion_model():
     return pipeline(
         task="text-classification",
         model="pysentimiento/robertuito-emotion-analysis",
-        return_all_scores=True
+        top_k=None
     )
 
 def predict_emotion(text: str):
@@ -38,11 +38,16 @@ def predict_emotion(text: str):
             "score": emotion['score']
         })
     
-    # Encontrar la emoción con mayor puntuación
-    dominant_emotion = max(processed_results, key=lambda x: x['score'])
+    # 5. Ordenamos de mayor a menor score
+    sorted_results = sorted(processed_results, key=lambda x: x["score"], reverse=True)
+
+    # 6. Emoción dominante    
+    dominant_emotion = sorted_results[0]["label"] if sorted_results else "otros"
+    dominant_score = sorted_results[0]["score"] if sorted_results else 0.0
+
     
     return {
-        "emotion": dominant_emotion['label'],
-        "score": dominant_emotion['score'],
-        "all_emotions": processed_results
+        "emotion": dominant_emotion,
+        "score": dominant_score,
+        "all_emotions": sorted_results
     }
