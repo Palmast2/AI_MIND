@@ -2,13 +2,36 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import os
 from openai import OpenAI
-from datetime import datetime
+from datetime import datetime, date
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 import re
 
 client = OpenAI()
+
+
+MAX_REPORTES_DIARIOS = 5
+
+def contar_reportes_hoy(db: Session, user_id: str) -> int:
+    """Cuenta cuántos reportes ha generado el usuario hoy."""
+    stmt = text("""
+        SELECT COUNT(*) 
+        FROM reportes_uso
+        WHERE user_id = :user_id
+        AND DATE(created_at) = :today
+    """)
+    result = db.execute(stmt, {"user_id": user_id, "today": date.today()}).scalar()
+    return result or 0
+
+def registrar_reporte(db: Session, user_id: str):
+    """Registra el uso de un reporte en la tabla reportes_uso."""
+    stmt = text("""
+        INSERT INTO reportes_uso (user_id, created_at)
+        VALUES (:user_id, NOW())
+    """)
+    db.execute(stmt, {"user_id": user_id})
+    db.commit()
 
 def obtener_meses_disponibles(db: Session, user_id: str):
     stmt = text("""

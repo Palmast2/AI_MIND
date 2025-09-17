@@ -25,3 +25,9 @@ extremos se guardan algunos mensajes del usuario en eventos criticos
 Para poder usar los reportes deberia de verse la ruta asi:
 ejem: /api/v1/pdf/2025/8
 ejem: /api/v1/meses
+
+Los reportes tiene limite de por ver 5 reportes al dia por usuario
+
+la ruta para poder usar emociones, se ve algo asi:
+ejem: /api/v1/emociones/mensuales
+ejem: /api/v1/emociones/semanales
