@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+import logging
 import os
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +21,10 @@ app = FastAPI(
     title="AI_MIND",
     version="1.0.0",
 )
+
+# Configuración de logging
+logging.basicConfig(level=logging.INFO)
+
 # Configuración de rate limit
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

@@ -9,18 +9,21 @@ from app.core.reporte_service import (
     registrar_reporte,
     MAX_REPORTES_DIARIOS
 )
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi_jwt_auth import AuthJWT
+from app.core.rate_limit import limiter
 
 
 router = APIRouter()
 
 @router.get("/pdf/{year}/{month}")
-def generar_pdf_por_mes( 
+@limiter.limit("5/day")
+def generar_pdf_por_mes(
+    request: Request,
     year: int, 
     month: int, 
     db: Session = Depends(get_db),
-    Authorize: AuthJWT = Depends()
+    Authorize: AuthJWT = Depends(),
     ):
     """
     Genera un reporte en PDF del historial de un usuario en un mes específico.
@@ -67,7 +70,9 @@ def generar_pdf_por_mes(
     return FileResponse(file_path, media_type="application/pdf", filename=file_path.split("/")[-1])
 
 @router.get("/meses")
+@limiter.limit("20/day")
 def meses_disponibles(
+    request: Request,
     db: Session = Depends(get_db),
     Authorize: AuthJWT = Depends()
     ):

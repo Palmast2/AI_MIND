@@ -46,3 +46,4 @@ class GPTResponse(BaseModel):
 class ChatResponse(BaseModel):
     prompt: str
     response: GPTResponse
+    emocion_pet: str
