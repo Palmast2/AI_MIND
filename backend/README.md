@@ -10,3 +10,6 @@ Sobre el .env:
 -se ha agregado un example sobre como configurar el .env, esta configuracion es necesaria para poder utilizar los endpoints y la conexion a bases de datos.
 -El archivo .env.example se explica a si mismo.
 -Para dudas sobre como consumir los endpoints del backend api consultar la documentacion posterior a levantar el servidor virtual de uvicorn:http://127.0.0.1:8000/docs#/ (explicado en pasos anteriores).
+
+Para produccion:
+postgresSQL 17^

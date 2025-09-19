@@ -1,26 +1,33 @@
 postgres (PostgreSQL) 17.5
 https://www.enterprisedb.com/downloads/postgres-postgresql-downloads
 
-postgrest-v13.0.2-windows-x86-64
-https://github.com/PostgREST/postgrest/releases
 
 
 Estructura del Proyecto:
 AI_MIND/
 └── db/
     ├── init.sql            # Script para crear todas las tablas y extensiones
-    ├── postgrest.conf      # Archivo de configuración de PostgREST
-    └── postgrest.exe       # Ejecutable de PostgREST
+    ├── chat.sql            # Script para modificacion de la tabla mensajes
+    ├── directrices.sql            # Script de advertencias, estrategias.
+    
+
+Consideraciones:
+pip install markdown
+pip install openai
+pip install reportlab
+PostgresSQL 17.5
+pgcrypto 1.3
 
 
-antes de eso el postrest tienes que instalarlo y tambien agregar el path
-del postgrest al sistema de tu pc
+Teniendo la base de datos cuando mandes un mensaje en /chat se guardara en la db y tambien en algunos casos 
+extremos se guardan algunos mensajes del usuario en eventos criticos
 
-ya ahora si con esa estructura y con las credenciales
-Ejecuta el script init.sql dentro de la base ia_mind_db para crear todas las tablas:
-\i path/a/AI_MIND/db/init.sql
+Para poder usar los reportes deberia de verse la ruta asi:
+ejem: /api/v1/pdf/2025/8
+ejem: /api/v1/meses
 
-y corres el servidor:
-cd AI_MIND/db
-.\postgrest.exe postgrest.conf
-se veria el comando asi
+Los reportes tiene limite de por ver 5 reportes al dia por usuario
+
+la ruta para poder usar emociones, se ve algo asi:
+ejem: /api/v1/emociones/mensuales
+ejem: /api/v1/emociones/semanales

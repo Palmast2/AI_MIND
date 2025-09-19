@@ -1,17 +1,17 @@
 import os
-from fastapi import APIRouter, HTTPException, Depends, Response
+from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from datetime import timedelta
 from fastapi_jwt_auth import AuthJWT
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from fastapi import Request
 from google.auth.exceptions import GoogleAuthError
 from app.schemas.user import UserCreate, UserLogin, UserOut
-from app.schemas.auth import AccessResponse, GoogleTokenRequest
-from app.crud.user import get_user_by_email, create_user
-from app.core.security import verify_password
+from app.schemas.auth import AccessResponse, GoogleTokenRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.crud.user import get_user_by_email, create_user, update_user_password
+from app.core.security import verify_password, get_password_hash
+from app.core.utils import generate_reset_token, verify_reset_token, send_reset_email
 from app.database import get_db
 from slowapi.util import get_remote_address
 from app.core.rate_limit import limiter
@@ -273,3 +273,70 @@ def logout(request: Request, response: Response):
     response.delete_cookie("csrf_access_token")
     response.delete_cookie("csrf_refresh_token")
     return {"msg": "Sesión cerrada"}
+
+@router.post("/forgot-password")
+def forgot_password(
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Solicita la recuperación de contraseña por correo electrónico.
+
+    Envía un correo de recuperación al usuario si el email existe en la base de datos.
+
+    **Request Body:**
+    - email (str): Correo electrónico registrado del usuario.
+
+    **Respuesta:**
+    - msg (str): Mensaje indicando que el correo de recuperación fue enviado.
+
+    **Errores:**
+    - 404: Si el usuario no existe.
+
+    **Notas:**
+    - El correo contiene un enlace con un token para restablecer la contraseña, como se muestra a continuación:
+    https://app.aimind.portablelab.work/reset-password?token={Token aquí}
+    - El token es seguro y de un solo uso.
+    - El enlace expira en 1 hora.
+    - Si el email no está registrado, no se envía el correo.
+    """
+    user = get_user_by_email(db, data.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    token = generate_reset_token(data.email)
+    send_reset_email(data.email, token)
+    return {"msg": "Correo de recuperación enviado"}
+
+@router.post("/reset-password")
+def reset_password(
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Restablece la contraseña de un usuario usando el token recibido por correo.
+
+    **Request Body:**
+    - token (str): Token recibido en el correo de recuperación.
+    - new_password (str): Nueva contraseña segura.
+
+    **Respuesta:**
+    - msg (str): Mensaje indicando que la contraseña fue actualizada correctamente.
+
+    **Errores:**
+    - 400: Si el token es inválido o ha expirado.
+    - 404: Si el usuario no existe.
+
+    **Notas:**
+    - El token solo es válido por 1 hora.
+    - Si el token es válido, la contraseña se actualiza y el usuario puede iniciar sesión con la nueva contraseña.
+    - Si el token es inválido o expirado, se debe solicitar nuevamente la recuperación.
+    """
+    email = verify_reset_token(data.token)
+    if not email:
+        raise HTTPException(status_code=400, detail="Token inválido o expirado")
+    user = get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    hashed_password = get_password_hash(data.new_password)
+    update_user_password(db, user.user_id, hashed_password)
+    return {"msg": "Contraseña actualizada correctamente"}

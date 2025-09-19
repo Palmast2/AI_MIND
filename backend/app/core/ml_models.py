@@ -10,12 +10,33 @@ EMOTION_LABELS = {
     "LABEL_5": "sorpresa"
 }
 
+BASIC_EMOTIONS = {"enojo", "asco", "miedo", "alegría", "tristeza", "sorpresa"}
+
+ML_LABEL_TRANSLATION = {
+    "anger": "enojo",
+    "disgust": "asco",
+    "fear": "miedo",
+    "joy": "alegría",
+    "sadness": "tristeza",
+    "surprise": "sorpresa",
+    "others": "otros"
+}
+
+EMOTION_PET_MAP = {
+    "enojo": "calma",
+    "asco": "calma",
+    "miedo": "seguridad",
+    "alegría": "alegría",
+    "tristeza": "comprensión",
+    "sorpresa": "curiosidad"
+}
+
 @lru_cache(maxsize=1)  # Cache para cargar el modelo solo una vez
 def get_emotion_model():
     return pipeline(
         task="text-classification",
         model="pysentimiento/robertuito-emotion-analysis",
-        return_all_scores=True
+        top_k=None
     )
 
 def predict_emotion(text: str):
@@ -38,11 +59,28 @@ def predict_emotion(text: str):
             "score": emotion['score']
         })
     
-    # Encontrar la emoción con mayor puntuación
-    dominant_emotion = max(processed_results, key=lambda x: x['score'])
+    # 5. Ordenamos de mayor a menor score
+    sorted_results = sorted(processed_results, key=lambda x: x["score"], reverse=True)
+
+    # 6. Emoción dominante    
+    dominant_emotion = sorted_results[0]["label"] if sorted_results else "otros"
+    dominant_score = sorted_results[0]["score"] if sorted_results else 0.0
+
     
     return {
-        "emotion": dominant_emotion['label'],
-        "score": dominant_emotion['score'],
-        "all_emotions": processed_results
+        "emotion": dominant_emotion,
+        "score": dominant_score,
+        "all_emotions": sorted_results
     }
+
+def map_emotion_for_pet(emotion_detected: str) -> str:
+    return EMOTION_PET_MAP.get(emotion_detected, "calma")
+
+def get_basic_emotion(emotion_result):
+    emotions = emotion_result.get("all_emotions", [])
+    emotions = sorted(emotions, key=lambda e: e.get("score", 0), reverse=True)
+    for e in emotions:
+        label_es = ML_LABEL_TRANSLATION.get(e["label"], e["label"])
+        if label_es in BASIC_EMOTIONS:
+            return label_es
+    return "calma"

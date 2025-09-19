@@ -1,4 +1,3 @@
-# app/core/chat_history.py
 import os
 from app.crud.message import guardar_mensaje
 from sqlalchemy import text
@@ -35,11 +34,15 @@ def obtener_historial_usuario(db: Session, user_id: str, limite: int = MAX_HISTO
 def guardar_mensaje_historial(db: Session, user_id: str, role: str, content: str,
                                emocion_detectada: str, modelo_utilizado: str, consentimiento=True):
     """
-    Guarda un mensaje en la base de datos.
+    Guarda un mensaje en la base de datos, asegurando que no se guarde 'otros' o "others" como emoción.
     """
-    guardar_mensaje(
+    if emocion_detectada in ["otros", "others"]:
+        emocion_detectada = "tranquilidad"
+
+    return guardar_mensaje(
         db=db,
         user_id=user_id,
+        role=role,
         contenido=content,
         emocion_detectada=emocion_detectada,
         modelo_utilizado=modelo_utilizado,
