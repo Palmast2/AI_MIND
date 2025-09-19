@@ -88,12 +88,6 @@ async def chat_gpt(
 
     # 4️⃣ Construir prompt con historial y contexto emocional
     prompt = build_prompt(db, user_id, emocion_detectada, tecnicas_recomendadas, advertencias)
-    prompt += (
-        "\n\nAl final de tu respuesta, indica la emoción que se debe mostrar al usuario en respuesta a su mensaje y el nivel de expresión "
-        "(alto, medio, bajo), según el contexto y las metodologías psicológicas. "
-        "Formato:\nemocion-respuesta: [emoción aquí]\nnivel-respuesta: [nivel aquí]\n"
-        "Ejemplo:\nemocion-respuesta: alegría\nnivel-respuesta: medio"
-    )
 
     # 5️⃣ Obtener historial completo desde DB para enviar al modelo
     historial = obtener_historial_usuario(db, user_id, limite=3)
