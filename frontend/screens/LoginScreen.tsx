@@ -11,14 +11,15 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { EyeClosed } from "../icons/EyeClosed";
+import { EyeOpen } from "../icons/EyeOpen";
 
-// 👇 recibe navigation desde React Navigation
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // 👈 Estado para controlar visibilidad
 
   const onLogin = async () => {
-    // TODO: lógica de login
     console.log({ email, password });
     if (await loginApi(email, password)) {
       navigation.navigate('Home', { initialMessage: email, password });
@@ -28,13 +29,13 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const saveCookies = async (cookiesObj: Record<string, string>) => {
-  try {
-    await AsyncStorage.setItem('cookies', JSON.stringify(cookiesObj));
-    console.log('✅ Cookies guardadas');
-  } catch (e) {
-    console.error('Error al guardar cookies', e);
-  }
-};
+    try {
+      await AsyncStorage.setItem('cookies', JSON.stringify(cookiesObj));
+      console.log('✅ Cookies guardadas');
+    } catch (e) {
+      console.error('Error al guardar cookies', e);
+    }
+  };
 
   const loginApi = async (email: string, password: string): Promise<string> => {
     try {
@@ -52,13 +53,11 @@ export default function LoginScreen({ navigation }: any) {
       }
 
       const setCookie = response.headers.get('set-cookie');
-
       if (!setCookie) throw new Error('No se recibió Set-Cookie');
 
       const cookiesObj: Record<string, string> = {};
-
       setCookie
-        .split(/,(?=[^;]+=[^;]+)/g) // separa cada cookie
+        .split(/,(?=[^;]+=[^;]+)/g)
         .forEach((cookieStr) => {
           const [pair] = cookieStr.split(';');
           const [name, value] = pair.split('=').map((s) => s.trim());
@@ -68,7 +67,6 @@ export default function LoginScreen({ navigation }: any) {
       await saveCookies(cookiesObj);
 
       const data = await response.json();
-      // 👀 Ajusta según lo que devuelva tu backend
       console.log(data);
       return JSON.stringify(data);
     } catch (error) {
@@ -78,7 +76,6 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const onGoogle = () => {
-    // TODO: lógica de login con Google
     console.log('Google Sign-In');
   };
 
@@ -110,14 +107,28 @@ export default function LoginScreen({ navigation }: any) {
                 className="w-full rounded-2xl border border-emerald-700 bg-emerald-800/60 px-5 py-4 text-white"
               />
 
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                placeholder="Contraseña"
-                placeholderTextColor="rgba(255,255,255,0.7)"
-                className="w-full rounded-2xl border border-emerald-700 bg-emerald-800/60 px-5 py-4 text-white"
-              />
+              {/* Input de contraseña con botón de ojo 👁️ */}
+              <View className="w-full flex-row items-center rounded-2xl border border-emerald-700 bg-emerald-800/60 px-3">
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword} // 👈 control dinámico
+                  placeholder="Contraseña"
+                  placeholderTextColor="rgba(255,255,255,0.7)"
+                  className="flex-1 py-4 px-2 text-white"
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Text className="text-white text-lg"
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>
+                    {showPassword ? (
+                    <EyeOpen size={24} color="white" />
+                  ) : (
+                    <EyeClosed size={24} color="white" />
+                  )}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
                 onPress={onLogin}

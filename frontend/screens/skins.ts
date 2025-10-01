@@ -3,11 +3,11 @@ export const STORAGE_KEY = "catSkin";
 
 // Mapa de skins locales (clave → require)
 export const SKINS: Record<string, any> = {
-  default: require("../assets/cat-pixel.png"),
-  perro: require("../assets/perro-pixel.png"),
-  oso: require("../assets/oso-pixel.png"),
-  loro: require("../assets/loro-pixel.png"),
-  gallina: require("../assets/gallina-pixel.png"),
+  default: require("../assets/gato/main.png"),
+  perro: require("../assets/perro/main.png"),
+  oso: require("../assets/oso/main.png"),
+  ave: require("../assets/ave/main.png"),
+  gallina: require("../assets/gallo/main.png"),
 };
 
 // Tipos compartidos (opcional, para no duplicar)

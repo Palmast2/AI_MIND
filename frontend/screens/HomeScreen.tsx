@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useLayoutEffect } from "react";
+import React, { useMemo, useRef, useState, useLayoutEffect } from 'react';
 import {
   View,
   Image,
@@ -9,20 +9,21 @@ import {
   Text,
   TouchableOpacity,
   Platform,
-} from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { RadarChart } from 'react-native-gifted-charts';
 
-import { SKINS, STORAGE_KEY } from "./skins";
+import { SKINS, STORAGE_KEY } from './skins';
 
 export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [isFocused, setIsFocused] = useState(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useState('');
 
-  const [skinKey, setSkinKey] = useState<string>("default");
+  const [skinKey, setSkinKey] = useState<string>('default');
   const [remoteUri, setRemoteUri] = useState<string | null>(null);
 
   const scrollRef = useRef<any>(null);
@@ -31,16 +32,22 @@ export default function HomeScreen({ navigation }: any) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Skins")}
-          style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Skins</Text>
-        </TouchableOpacity>
+        <View className='flex flex-row'>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Skins')}
+            style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Skins</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Informe')}
+            style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Informe</Text>
+          </TouchableOpacity>
+        </View>
       ),
-      headerStyle: { backgroundColor: "#00634C" },
-      headerTitleStyle: { color: "#fff" },
-      headerTintColor: "#fff",
+      headerStyle: { backgroundColor: '#00634C' },
+      headerTitleStyle: { color: '#fff' },
+      headerTintColor: '#fff',
     });
   }, [navigation]);
 
@@ -52,22 +59,22 @@ export default function HomeScreen({ navigation }: any) {
           const saved = await AsyncStorage.getItem(STORAGE_KEY);
           if (!isActive) return;
           if (!saved) {
-            setSkinKey("default");
+            setSkinKey('default');
             setRemoteUri(null);
             return;
           }
           if (/^https?:\/\//i.test(saved) || /^file:\/\//i.test(saved)) {
             setRemoteUri(saved);
-            setSkinKey("default");
+            setSkinKey('default');
           } else if ((SKINS as any)[saved]) {
             setSkinKey(saved);
             setRemoteUri(null);
           } else {
-            setSkinKey("default");
+            setSkinKey('default');
             setRemoteUri(null);
           }
         } catch {
-          setSkinKey("default");
+          setSkinKey('default');
           setRemoteUri(null);
         }
       })();
@@ -96,12 +103,12 @@ export default function HomeScreen({ navigation }: any) {
     const msg = text.trim();
     if (!msg) return;
     Keyboard.dismiss();
-    navigation.navigate("Chat", { initialMessage: msg });
-    setText("");
+    navigation.navigate('Chat', { initialMessage: msg });
+    setText('');
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#00634C" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#00634C' }}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAwareScrollView
           ref={scrollRef}
@@ -123,11 +130,20 @@ export default function HomeScreen({ navigation }: any) {
           extraScrollHeight={12}
           extraHeight={0}
           showsVerticalScrollIndicator={false}
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
-        >
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}>
+          <View style={{ width: 25, height: 25, alignSelf: 'center', transform: [{ scale: 0.5 }] }}>
+            <RadarChart
+              data={[8, 3, 5, 1]}
+              labels={['Tristeza', 'Alegria', 'Tranquilidad', 'Crisis']}
+              labelConfig={{ stroke: 'white', fontWeight: 'bold', fontSize: 10 }}
+              dataLabels={['8', '3', '5', '1']}
+              maxValue={10}
+              noOfSections={5}
+            />
+          </View>
           <View style={{ flex: 1 }}>
             {/* Imagen */}
-            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <Image
                 source={imageSource}
                 style={{ width: 300, height: 300 }}
@@ -138,30 +154,29 @@ export default function HomeScreen({ navigation }: any) {
             {/* Input burbuja */}
             <View
               style={{
-                alignSelf: "stretch",
-                width: "100%",
-                backgroundColor: "white",
+                alignSelf: 'stretch',
+                width: '100%',
+                backgroundColor: 'white',
                 borderRadius: 24,
                 paddingHorizontal: 16,
                 paddingVertical: 10,
-                shadowColor: "#000",
+                shadowColor: '#000',
                 shadowOpacity: 0.1,
                 shadowRadius: 4,
                 elevation: 3,
                 // 👇 separa del borde inferior sin exagerar
                 marginBottom: 8,
-              }}
-            >
+              }}>
               <TextInput
                 ref={inputRef}
                 placeholder="¿Cómo ha estado tu día?"
                 placeholderTextColor="#00634C"
                 style={{
-                  color: "#00634C",
+                  color: '#00634C',
                   fontSize: 16,
                   minHeight: 40,
                   maxHeight: 140,
-                  textAlignVertical: "top",
+                  textAlignVertical: 'top',
                 }}
                 value={text}
                 onChangeText={setText}
@@ -175,7 +190,7 @@ export default function HomeScreen({ navigation }: any) {
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 onKeyPress={({ nativeEvent }) => {
-                  if (nativeEvent.key === "Enter") {
+                  if (nativeEvent.key === 'Enter') {
                     handleSend();
                   }
                 }}
