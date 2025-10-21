@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+import logging
 import os
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +9,7 @@ from slowapi import _rate_limit_exceeded_handler
 
 from fastapi_jwt_auth.exceptions import AuthJWTException, JWTDecodeError
 
-from app.api.v1.endpoints import analyze, auth, chat, reportes
+from app.api.v1.endpoints import analyze, auth, chat, reportes, emociones
 from app.core import config
 from app.core.rate_limit import limiter
 
@@ -20,6 +21,10 @@ app = FastAPI(
     title="AI_MIND",
     version="1.0.0",
 )
+
+# Configuración de logging
+logging.basicConfig(level=logging.INFO)
+
 # Configuración de rate limit
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -78,4 +83,10 @@ app.include_router(
     reportes.router, 
     prefix="/api/v1", 
     tags=["Reportes"]
+)
+
+app.include_router(
+    emociones.router,
+    prefix="/api/v1/emociones",
+      tags=["Emociones"]
 )

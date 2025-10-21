@@ -4,3 +4,9 @@ ALTER TABLE mensajes
 ADD COLUMN role VARCHAR(20) CHECK (role IN ('user', 'assistant')) NOT NULL DEFAULT 'user';
 ALTER TABLE mensajes
 ADD COLUMN created_at TIMESTAMP DEFAULT NOW();
+
+CREATE TABLE reportes_uso (
+    id SERIAL PRIMARY KEY,
+    user_id UUID NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
