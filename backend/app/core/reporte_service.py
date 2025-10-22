@@ -19,9 +19,9 @@ def contar_reportes_hoy(db: Session, user_id: str) -> int:
         SELECT COUNT(*) 
         FROM reportes_uso
         WHERE user_id = :user_id
-        AND DATE(created_at) = :today
+        AND DATE(created_at) = CURRENT_DATE
     """)
-    result = db.execute(stmt, {"user_id": user_id, "today": date.today()}).scalar()
+    result = db.execute(stmt, {"user_id": user_id}).scalar()
     return result or 0
 
 def registrar_reporte(db: Session, user_id: str):
