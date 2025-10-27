@@ -144,7 +144,7 @@ export default function HomeScreen({ navigation }: any) {
 
   // RadarChart
   const [radarValues, setRadarValues] = useState<number[]>([0, 0, 0, 0, 0]);
-  const radarLabels = ['Tristeza', 'Alegría', 'Tranquilidad', 'Crisis'];
+  const radarLabels = ['Tristeza', 'Alegría', 'Tranquilidad', 'Sorpresa', 'Otros'];
   const [radarDataLabels, setRadarDataLabels] = useState<string[]>(['0', '0', '0', '0', '0']);
 
   const scrollRef = useRef<any>(null);
