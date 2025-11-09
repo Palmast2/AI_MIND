@@ -13,7 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 
-// 👇 importa todo desde el módulo compartido
+// 👇 importa solo lo que sí existe ahora en skins.ts
 import {
   SKINS,
   STORAGE_KEY,
@@ -21,8 +21,7 @@ import {
   type LocalSkinItem,
   type RemoteSkinItem,
   isRemoteValue,
-  resolveSource,
-} from "./skins"; // <-- ajusta el path si tu archivo está en otra carpeta
+} from "./skins";
 
 export default function SkinsScreen() {
   const navigation = useNavigation();
@@ -34,8 +33,12 @@ export default function SkinsScreen() {
   );
 
   const [items, setItems] = useState<SkinItem[]>(baseItems);
-  const [selected, setSelected] = useState<SkinItem>({ type: "local", key: "default" });
+  const [selected, setSelected] = useState<SkinItem>({ type: "local", key: "default" as keyof typeof SKINS });
   const [remoteUrl, setRemoteUrl] = useState("");
+
+  // 🔧 Helper local para obtener la imagen de preview / grid
+  const getSource = (item: SkinItem) =>
+    item.type === "remote" ? { uri: item.uri } : (SKINS[item.key] ?? SKINS.default);
 
   // Cargar selección previa
   useEffect(() => {
@@ -58,8 +61,8 @@ export default function SkinsScreen() {
     })();
   }, []);
 
-  // Fuente para el preview (usando helper)
-  const previewSource = useMemo(() => resolveSource(selected), [selected]);
+  // Fuente para el preview
+  const previewSource = useMemo(() => getSource(selected), [selected]);
 
   const handleAddRemote = () => {
     const url = remoteUrl.trim();
@@ -94,7 +97,7 @@ export default function SkinsScreen() {
   const handleReset = async () => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, "default");
-      setSelected({ type: "local", key: "default" });
+      setSelected({ type: "local", key: "default" as keyof typeof SKINS });
       navigation.goBack();
     } catch (e) {
       Alert.alert("Error", "No se pudo restablecer.");
@@ -107,7 +110,7 @@ export default function SkinsScreen() {
         ? selected.type === "remote" && selected.uri === item.uri
         : selected.type === "local" && selected.key === item.key;
 
-    const source = resolveSource(item); // 👈 helper
+    const source = getSource(item);
 
     return (
       <TouchableOpacity
@@ -170,6 +173,12 @@ export default function SkinsScreen() {
         renderItem={renderItem}
         numColumns={3}
         contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
+        ListHeaderComponent={
+          <>
+            {/* Campo para agregar URL remota si aún lo quieres visible */}
+            
+          </>
+        }
       />
 
       {/* Acciones */}

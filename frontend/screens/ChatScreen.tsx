@@ -14,7 +14,14 @@ import { KeyboardAwareFlatList } from 'react-native-keyboard-aware-scroll-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { SKINS, STORAGE_KEY } from "./skins"; // 👈 importa el mapa compartido
+import {
+  SKINS,
+  STORAGE_KEY,
+  isRemoteValue,
+  normalizeEmotion,
+  resolveSourceByEmotion,
+  type EmotionKey
+} from "./skins"; // 👈 importa helpers nuevos
 
 type Msg = { id: string; role: 'user' | 'assistant'; text: string };
 
@@ -22,15 +29,17 @@ export default function ChatScreen({ route }: any) {
   const insets = useSafeAreaInsets();
   const initialMessage = route?.params?.initialMessage as string | undefined;
 
-  // Orden normal: viejo -> nuevo (lo reciente se ve ABAJO)
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
-   // 👇 Estado para la skin
+  // Skin seleccionada y posibles remotos
   const [skinKey, setSkinKey] = useState<keyof typeof SKINS>('default');
   const [remoteUri, setRemoteUri] = useState<string | null>(null);
+
+  // 👇 Emoción actual (normalizada y sin acentos)
+  const [emotionKey, setEmotionKey] = useState<EmotionKey | null>(null);
 
   const listRef = useRef<KeyboardAwareFlatList<Msg>>(null);
   const inputRef = useRef<TextInput>(null);
@@ -60,10 +69,6 @@ export default function ChatScreen({ route }: any) {
   const handleBlur = useCallback(() => setIsFocused(false), []);
 
   // ====== LÓGICA DE SKINS ======
-  const isRemoteValue = (v: string) =>
-    /^https?:\/\//i.test(v) || /^file:\/\//i.test(v);
-
-  // Cargar/recargar skin al enfocar (útil al volver de SkinsScreen)
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -102,44 +107,54 @@ export default function ChatScreen({ route }: any) {
 
   // Fuente para el avatar del asistente
   const imageSource = useMemo(() => {
+    // Si el usuario eligió una imagen remota, la respetamos (no variamos por emoción)
     if (remoteUri) return { uri: remoteUri };
-    return SKINS[skinKey] ?? SKINS.default;
-  }, [skinKey, remoteUri]);
+    // Si es local, resolvemos por emoción; si no hay variante, cae a main
+    return resolveSourceByEmotion(skinKey, emotionKey);
+  }, [skinKey, remoteUri, emotionKey]);
 
-  // Mock de API — reemplaza por tu fetch real
-  const callAPI = async (userMessage: string): Promise<string> => {
-  try {
-    const cookiesString  = await AsyncStorage.getItem('cookies');
-    if (!cookiesString) {
-      throw new Error("No se encontraron cookies guardadas");
+  // Llamada real a API
+  // Debe devolver texto + emoción; ajusta si tu backend cambia
+  const callAPI = async (userMessage: string): Promise<{ content: string; emotion: EmotionKey | null }> => {
+    try {
+      const cookiesString  = await AsyncStorage.getItem('cookies');
+      if (!cookiesString) throw new Error("No se encontraron cookies guardadas");
+
+      const cookies = JSON.parse(cookiesString);
+      const token = cookies.csrf_access_token;
+
+      const response = await fetch("https://api.aimind.portablelab.work/api/v1/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": token,
+        },
+        body: JSON.stringify({ user_message: userMessage }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error en la petición: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Según ejemplo que compartiste:
+      // { prompt: "...", response: {...}, emocion_pet: "comprensión" }
+      const emotionRaw: string | null = data?.emocion_pet ?? null;
+      const emotionNorm = normalizeEmotion(emotionRaw);  // "comprensión" -> "comprension"
+
+      // Texto del asistente (ajusta si tu payload difiere)
+      const content: string =
+        data?.response?.choices?.[0]?.message?.content ??
+        "Gracias por compartir. ¿Quieres contarme un poco más?";
+
+      return { content, emotion: emotionNorm };
+    } catch (error) {
+      console.error(error);
+      return { content: "Hubo un error al llamar a la API", emotion: null };
     }
-    const cookies = JSON.parse(cookiesString);
-    const token = cookies.csrf_access_token
-    const response = await fetch("https://api.aimind.portablelab.work/api/v1/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-TOKEN": token,
-      },
-      body: JSON.stringify({ user_message: userMessage }),
-      credentials: 'include',
-
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error en la petición: ${response.status}`);
-    }
-
-    const data = await response.json();
-    // 👀 Ajusta según lo que devuelva tu backend
-    const content = data.response.choices[0].message.content;
-
-    return content;
-  } catch (error) {
-    console.error(error);
-    return "Hubo un error al llamar a la API";
-  }
-};
+  };
 
   const sendMessage = useCallback(
     async (payload?: string) => {
@@ -152,8 +167,12 @@ export default function ChatScreen({ route }: any) {
 
       try {
         setLoading(true);
-        const reply = await callAPI(toSend);
-        append({ id: nowId('a'), role: 'assistant', text: reply });
+        const { content, emotion } = await callAPI(toSend);
+
+        // 👇 Actualiza emoción (esto cambiará la imagen mostrada)
+        setEmotionKey(emotion ?? null);
+
+        append({ id: nowId('a'), role: 'assistant', text: content });
       } catch {
         append({
           id: nowId('e'),
@@ -200,11 +219,10 @@ export default function ChatScreen({ route }: any) {
     );
   };
 
-  // Footer memoizado para que NO se remonte el TextInput en cada tecla (mantiene el foco/teclado abierto)
+  // Footer memoizado
   const ListFooter = useMemo(
     () => (
       <>
-        {/* “Escribiendo…” */}
         {loading && (
           <View className="mb-2 items-start">
             <View className="max-w-[60%] flex-row items-center rounded-2xl bg-white px-3 py-2">
@@ -214,7 +232,6 @@ export default function ChatScreen({ route }: any) {
           </View>
         )}
 
-        {/* Input estilo Home + botón Enviar */}
         <View
           style={{
             alignSelf: 'stretch',
@@ -228,7 +245,7 @@ export default function ChatScreen({ route }: any) {
             shadowRadius: 4,
             elevation: 3,
             marginTop: 8,
-            flexDirection: 'row',       // 👈 input y botón en la misma línea
+            flexDirection: 'row',
             alignItems: 'center',
           }}
         >
@@ -250,13 +267,12 @@ export default function ChatScreen({ route }: any) {
             multiline
             numberOfLines={1}
             scrollEnabled
-            returnKeyType="default"   // ← ya NO enviamos con Enter
-            blurOnSubmit={false}      // ← evita cerrar teclado al teclear
+            returnKeyType="default"
+            blurOnSubmit={false}
             onFocus={handleFocus}
             onBlur={handleBlur}
           />
 
-          {/* Botón enviar (a la derecha) */}
           <View className="mt-2 flex-row justify-end">
             <TouchableOpacity
               onPress={() => {
@@ -271,7 +287,6 @@ export default function ChatScreen({ route }: any) {
           </View>
         </View>
 
-        {/* padding para el safe area inferior */}
         <View style={{ height: insets.bottom }} />
       </>
     ),
@@ -286,19 +301,16 @@ export default function ChatScreen({ route }: any) {
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          // Ancla el contenido al fondo (mensajes se ven "abajo")
           contentContainerStyle={{
             paddingVertical: 8,
             flexGrow: 1,
             justifyContent: 'flex-end',
           }}
-          // Footer abajo, dentro de la lista
           ListFooterComponent={ListFooter}
           keyboardShouldPersistTaps="handled"
           enableOnAndroid
           enableAutomaticScroll
           keyboardOpeningTime={0}
-          // 🆙 Subida un poquito más (+5px)
           extraScrollHeight={isFocused ? 190 : 90}
           extraHeight={isFocused ? 145 : 45}
           onContentSizeChange={scrollToEnd}
