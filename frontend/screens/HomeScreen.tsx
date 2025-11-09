@@ -10,14 +10,17 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RadarChart } from 'react-native-gifted-charts';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Linking from 'expo-linking';
 
 import { SKINS, STORAGE_KEY } from './skins';
 
@@ -27,13 +30,13 @@ function getCurrentYearMonth() {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-// Convierte ArrayBuffer -> Base64 (para guardar PDF en Expo)
+// === GET /pdf/{year}/{month} usando fetch (respeta cookies) -> guardar -> compartir
+// Convierte ArrayBuffer -> Base64 (fallback si no hay Buffer)
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
   const bytes = new Uint8Array(buffer);
   let base64 = '';
   let i = 0;
-
   for (; i < bytes.length - 2; i += 3) {
     base64 += chars[bytes[i] >> 2];
     base64 += chars[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)];
@@ -54,35 +57,61 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return base64;
 }
 
-// === GET /pdf/{year}/{month} usando fetch (respeta cookies) -> guardar -> compartir
-async function downloadAndOpenMonthlyPdfExpo(): Promise<void> {
+export async function downloadAndOpenMonthlyPdfExpo(): Promise<void> {
   const cookiesString = await AsyncStorage.getItem('cookies');
-  if (!cookiesString) throw new Error('No se encontraron cookies guardadas');
-
+  if (!cookiesString) {
+    Alert.alert('Sesión requerida', 'Inicia sesión para generar y descargar el informe.');
+    throw new Error('No se encontraron cookies guardadas');
+  }
   const cookies = JSON.parse(cookiesString);
-  const token = cookies.csrf_access_token;
+  const csrf = cookies?.csrf_access_token ?? '';
 
   const { year, month } = getCurrentYearMonth();
-  const url = `https://api.aimind.portablelab.work/api/v1/pdf/${year}/${month}`;
+  const url = `https://api.aimind.portablelab.work/api/v1/pdf/${year}/${String(month).padStart(2, '0')}`;
 
-  const resp = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': token,
-      // Si tu backend requiere cookie explícita, podrías añadir:
-      // Cookie: cookies.cookieHeader || `session=${cookies.sessionId}`
-    },
-    credentials: 'include', // igual que tu callAPI
-  });
+  const headers: Record<string, string> = {
+    Accept: 'application/pdf',
+    'X-CSRF-TOKEN': csrf,
+    'X-Requested-With': 'XMLHttpRequest',
+  };
 
-  if (!resp.ok) {
-    throw new Error(`Error PDF: ${resp.status}`);
+  async function fetchPreservingHeaders(u: string, maxHops = 3): Promise<Response> {
+    let current = u;
+    for (let i = 0; i < maxHops; i++) {
+      const r = await fetch(current, { method: 'GET', headers, redirect: 'manual' as RequestRedirect });
+      if (![301, 302, 303, 307, 308].includes(r.status)) return r;
+      const next = r.headers.get('location');
+      if (!next) return r;
+      current = new URL(next, current).toString();
+    }
+    throw new Error('Demasiadas redirecciones');
   }
 
-  // Leemos como ArrayBuffer (mantiene cookies) y lo guardamos como Base64
+  let resp = await fetchPreservingHeaders(url);
+
+  if (resp.status === 202) {
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+      resp = await fetchPreservingHeaders(url);
+      if (resp.ok) break;
+    }
+  }
+
+  if (resp.status === 401) {
+    Alert.alert('No autorizado', 'El servidor no aceptó la solicitud (401).');
+    throw new Error('PDF status 401');
+  }
+  if (!resp.ok) {
+    Alert.alert('No se pudo generar el informe', `Código ${resp.status}.`);
+    throw new Error(`PDF status ${resp.status}`);
+  }
+
+  // Guardar binario como Base64
   const buffer = await resp.arrayBuffer();
-  const base64 = arrayBufferToBase64(buffer);
+  const base64 =
+    typeof Buffer !== 'undefined'
+      ? Buffer.from(buffer).toString('base64')
+      : arrayBufferToBase64(buffer);
 
   const fileName = `informe-${year}-${String(month).padStart(2, '0')}.pdf`;
   const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
@@ -91,16 +120,44 @@ async function downloadAndOpenMonthlyPdfExpo(): Promise<void> {
     encoding: FileSystem.EncodingType.Base64,
   });
 
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(fileUri, { mimeType: 'application/pdf', dialogTitle: 'Informe mensual' });
-  } else {
-    Alert.alert('PDF descargado', `Guardado en: ${fileUri}`);
+  const info = await FileSystem.getInfoAsync(fileUri);
+  if (!info.exists || (info.size ?? 0) < 100) {
+    Alert.alert('Informe vacío', 'El archivo descargado parece estar vacío. Intenta de nuevo.');
+    throw new Error('PDF muy pequeño o inexistente');
+  }
+
+  // 👇 Abrir directamente el PDF
+  try {
+    if (Platform.OS === 'android') {
+      const contentUri = await FileSystem.getContentUriAsync(fileUri);
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        type: 'application/pdf',
+        flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+      });
+    } else {
+      // iOS (y también funciona en Android en muchos casos)
+      await Linking.openURL(fileUri);
+    }
+  } catch (err) {
+    console.error('Error abriendo PDF:', err);
+    // Respaldo: menú de compartir
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: 'Informe mensual',
+      });
+    } else {
+      Alert.alert('PDF descargado', `Guardado en: ${fileUri}`);
+    }
   }
 }
 
+
 // === GET emociones/semanales (mantiene tus headers y cookies)
 async function fetchWeeklyEmotions(): Promise<number[]> {
-  // Devuelve [Tristeza, Alegría, Tranquilidad, Crisis]
+  // Devuelve [Tristeza, Alegría, Tranquilidad, Sorpresa, Otros]
   const cookiesString = await AsyncStorage.getItem('cookies');
   if (!cookiesString) throw new Error('No se encontraron cookies guardadas');
 
@@ -127,9 +184,8 @@ async function fetchWeeklyEmotions(): Promise<number[]> {
   const tristeza = Number(w['tristeza'] ?? 0);
   const alegria = Number(w['alegría'] ?? w['alegria'] ?? 0);
   const tranquilidad = Number(w['tranquilidad'] ?? 0);
-  const sorpresa = Number(w['sorpresa'] ?? 0); // si no llega, quedará 0
-  const otros = Number(w['otros'] ?? 0); // si no llega, quedará 0
-  
+  const sorpresa = Number(w['sorpresa'] ?? 0);
+  const otros = Number(w['otros'] ?? 0);
 
   return [tristeza, alegria, tranquilidad, sorpresa, otros];
 }
@@ -150,13 +206,19 @@ export default function HomeScreen({ navigation }: any) {
   const scrollRef = useRef<any>(null);
   const inputRef = useRef<any>(null);
 
+  // Estado para modal de carga
+  const [isDownloading, setIsDownloading] = useState(false);
+
   // Botón Informe -> descarga y abre el PDF (no navegamos a 'Informe')
   const handleInformePress = async () => {
     try {
+      setIsDownloading(true);
       await downloadAndOpenMonthlyPdfExpo();
     } catch (e: any) {
       console.error(e);
       Alert.alert('No se pudo abrir el PDF', 'Por cuestiones de costos generaremos el informe mas adelante');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -229,8 +291,8 @@ export default function HomeScreen({ navigation }: any) {
         } catch (e) {
           console.error(e);
           if (!mounted) return;
-          setRadarValues([0, 0, 0, 0]);
-          setRadarDataLabels(['0', '0', '0', '0']);
+          setRadarValues([0, 0, 0, 0, 0]);
+          setRadarDataLabels(['0', '0', '0', '0', '0']);
         }
       })();
       return () => {
@@ -346,6 +408,37 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         </KeyboardAwareScrollView>
       </TouchableWithoutFeedback>
+
+      {/* Modal de carga para la descarga/generación del PDF */}
+      <Modal visible={isDownloading} transparent animationType="fade" statusBarTranslucent>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              width: 280,
+              padding: 20,
+              borderRadius: 16,
+              backgroundColor: 'white',
+              alignItems: 'center',
+            }}
+          >
+            <ActivityIndicator size="large" />
+            <Text style={{ marginTop: 12, fontWeight: '700', fontSize: 16, color: '#0a0a0a' }}>
+              Generando informe…
+            </Text>
+            <Text style={{ marginTop: 6, textAlign: 'center', color: '#404040' }}>
+              Esto puede tardar un poco.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

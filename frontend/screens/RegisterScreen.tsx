@@ -2,18 +2,22 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  Image,
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   Keyboard,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EyeClosed } from "../icons/EyeClosed";
 import { EyeOpen } from "../icons/EyeOpen";
 
-// 🔐 Input reutilizable con ojo de mostrar/ocultar
+type RegisterResult =
+  | { ok: true; message?: string }
+  | { ok: false; message: string };
+
 function PasswordInput({
   value,
   onChangeText,
@@ -59,28 +63,55 @@ function PasswordInput({
   );
 }
 
-// 👇 recibe navigation desde React Navigation
 export default function RegisterScreen({ navigation }: any) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const passwordsMatch = password.length > 0 && password === passwordConfirm;
 
   const onRegister = async () => {
-    console.log({ email, password, passwordConfirm });
-    if (password !== passwordConfirm) {
-      alert("La contraseña no coincide");
+    if (!email || !password) {
+      Alert.alert("Campos requeridos", "Ingresa tu correo y contraseña.");
+      return;
+    }
+    if (!passwordsMatch) {
+      Alert.alert("Validación", "Las contraseñas no coinciden.");
       return;
     }
 
-    const ok = await registerApi(email, password);
-    if (ok) {
-      navigation.navigate("Login", { initialMessage: email, password, passwordConfirm });
-    } else {
-      alert("El registro no fue exitoso");
+    try {
+      setLoading(true);
+      const result = await registerApi(email, password);
+      setLoading(false);
+
+      if (result.ok) {
+        // Mostrar confirmación y navegar SOLO cuando el usuario acepte
+        Alert.alert(
+          "Registro exitoso",
+          result.message || "Tu cuenta fue creada correctamente.",
+          [
+            {
+              text: "Aceptar",
+              onPress: () =>
+                navigation.navigate("Login", {
+                  initialMessage: email,
+                }),
+            },
+          ],
+          { cancelable: false }
+        );
+      } else {
+        Alert.alert("No se pudo registrar", result.message);
+      }
+    } catch (e) {
+      setLoading(false);
+      Alert.alert("Error", "Ocurrió un error inesperado. Intenta de nuevo.");
     }
   };
 
-  const registerApi = async (email: string, password: string): Promise<boolean> => {
+  const registerApi = async (email: string, password: string): Promise<RegisterResult> => {
     try {
       const response = await fetch("https://api.aimind.portablelab.work/api/v1/register", {
         method: "POST",
@@ -88,25 +119,39 @@ export default function RegisterScreen({ navigation }: any) {
         body: JSON.stringify({ email, password }),
       });
 
+      // Manejo de estados comunes
+      if (response.status === 409) {
+        return { ok: false, message: "El correo ya está registrado." };
+      }
+      if (response.status === 400 || response.status === 422) {
+        // Si el backend envía detalle de validación en JSON
+        let detail = "";
+        try {
+          const err = await response.json();
+          detail = err?.message || err?.detail || "";
+        } catch {}
+        return { ok: false, message: detail || "Datos inválidos. Verifica la información." };
+      }
       if (!response.ok) {
-        console.error("Error en la petición:", response.status);
-        return false;
+        return { ok: false, message: `Error del servidor.` };
       }
 
-      const data = await response.json();
-      console.log("registerApi:", data);
-      return true;
+      // Éxito
+      // Puedes leer algún mensaje/usuario si lo devuelve el backend
+      let msg: string | undefined = undefined;
+      try {
+        const data = await response.json();
+        msg = data?.message;
+        console.log("registerApi:", data);
+      } catch {
+        // si no hay cuerpo JSON, no pasa nada
+      }
+      return { ok: true, message: msg };
     } catch (error) {
       console.error("Hubo un error al llamar a la API", error);
-      return false;
+      return { ok: false, message: "Problema de conexión. Intenta nuevamente." };
     }
   };
-
-  const onGoogle = () => {
-    console.log("Google Sign-In");
-  };
-
-  const passwordsMatch = password.length > 0 && password === passwordConfirm;
 
   return (
     <SafeAreaView className="flex-1 bg-emerald-900">
@@ -139,9 +184,9 @@ export default function RegisterScreen({ navigation }: any) {
                 className="w-full rounded-2xl px-5 py-4 bg-emerald-800/60 text-white border border-emerald-700"
                 textContentType="emailAddress"
                 autoCorrect={false}
+                editable={!loading}
               />
 
-              {/* 🔐 Contraseña */}
               <PasswordInput
                 value={password}
                 onChangeText={setPassword}
@@ -149,7 +194,6 @@ export default function RegisterScreen({ navigation }: any) {
                 testID="password"
               />
 
-              {/* 🔐 Confirmación de contraseña */}
               <PasswordInput
                 value={passwordConfirm}
                 onChangeText={setPasswordConfirm}
@@ -157,7 +201,6 @@ export default function RegisterScreen({ navigation }: any) {
                 testID="passwordConfirm"
               />
 
-              {/* Indicador de coincidencia opcional */}
               {passwordConfirm.length > 0 && (
                 <Text className={`text-sm ${passwordsMatch ? "text-emerald-300" : "text-red-300"}`}>
                   {passwordsMatch ? "✔ Las contraseñas coinciden" : "✖ Las contraseñas no coinciden"}
@@ -166,16 +209,20 @@ export default function RegisterScreen({ navigation }: any) {
 
               <TouchableOpacity
                 onPress={onRegister}
-                disabled={!email || !password || !passwordsMatch}
+                disabled={!email || !password || !passwordsMatch || loading}
                 className={`mt-6 w-full rounded-2xl py-4 items-center ${
-                  !email || !password || !passwordsMatch
+                  !email || !password || !passwordsMatch || loading
                     ? "bg-white/50"
                     : "bg-white"
                 }`}
               >
-                <Text className="text-emerald-900 text-xl font-extrabold">
-                  Registrarse
-                </Text>
+                {loading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text className="text-emerald-900 text-xl font-extrabold">
+                    Registrarse
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
 

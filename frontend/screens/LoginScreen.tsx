@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   Keyboard,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,17 +16,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EyeClosed } from "../icons/EyeClosed";
 import { EyeOpen } from "../icons/EyeOpen";
 
+type LoginResult = { ok: true } | { ok: false; error: string };
+
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // 👈 Estado para controlar visibilidad
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const onLogin = async () => {
-    console.log({ email, password });
-    if (await loginApi(email, password)) {
+    if (!email || !password) {
+      Alert.alert('Campos requeridos', 'Ingresa tu correo y contraseña.');
+      return;
+    }
+    setLoading(true);
+    const result = await loginApi(email, password);
+    setLoading(false);
+
+    if (result.ok) {
       navigation.navigate('Home', { initialMessage: email, password });
     } else {
-      alert('El registro no fue exitoso');
+      // Mensaje según el error devuelto
+      Alert.alert('Inicio de sesión', result.error);
     }
   };
 
@@ -37,46 +50,50 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
-  const loginApi = async (email: string, password: string): Promise<string> => {
+  const loginApi = async (email: string, password: string): Promise<LoginResult> => {
     try {
       const response = await fetch('https://api.aimind.portablelab.work/api/v1/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: email, password: password }),
-        credentials: 'include',
+        // Nota: React Native ignora 'credentials', pero no estorba:
+        credentials: 'include' as any,
+        body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Error en la petición: ${response.status}`);
+      // Manejo explícito de 401
+      if (response.status === 401) {
+        return { ok: false, error: 'Credenciales inválidas. Verifica tu correo y contraseña.' };
       }
 
+      // Cualquier otro estado de error
+      if (!response.ok) {
+        return { ok: false, error: `No se pudo iniciar sesión. Credenciales no validas` };
+      }
+
+      // Si todo bien: leer cookies (si vienen) y guardar
       const setCookie = response.headers.get('set-cookie');
-      if (!setCookie) throw new Error('No se recibió Set-Cookie');
+      if (setCookie) {
+        const cookiesObj: Record<string, string> = {};
+        setCookie
+          .split(/,(?=[^;]+=[^;]+)/g)
+          .forEach((cookieStr) => {
+            const [pair] = cookieStr.split(';');
+            const [name, value] = pair.split('=').map((s) => s.trim());
+            if (name) cookiesObj[name] = value ?? '';
+          });
+        await saveCookies(cookiesObj);
+      }
 
-      const cookiesObj: Record<string, string> = {};
-      setCookie
-        .split(/,(?=[^;]+=[^;]+)/g)
-        .forEach((cookieStr) => {
-          const [pair] = cookieStr.split(';');
-          const [name, value] = pair.split('=').map((s) => s.trim());
-          cookiesObj[name] = value;
-        });
-
-      await saveCookies(cookiesObj);
-
-      const data = await response.json();
-      console.log(data);
-      return JSON.stringify(data);
+      // Consumir el cuerpo sólo en éxito
+      // (si necesitas datos del usuario, puedes usarlos aquí)
+      // const data = await response.json();
+      return { ok: true };
     } catch (error) {
       console.error(error);
-      return 'Hubo un error al llamar a la API';
+      return { ok: false, error: 'Hubo un problema de conexión. Intenta nuevamente.' };
     }
-  };
-
-  const onGoogle = () => {
-    console.log('Google Sign-In');
   };
 
   return (
@@ -105,35 +122,44 @@ export default function LoginScreen({ navigation }: any) {
                 placeholder="Email"
                 placeholderTextColor="rgba(255,255,255,0.7)"
                 className="w-full rounded-2xl border border-emerald-700 bg-emerald-800/60 px-5 py-4 text-white"
+                editable={!loading}
               />
 
-              {/* Input de contraseña con botón de ojo 👁️ */}
+              {/* Input de contraseña con botón de ojo */}
               <View className="w-full flex-row items-center rounded-2xl border border-emerald-700 bg-emerald-800/60 px-3">
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry={!showPassword} // 👈 control dinámico
+                  secureTextEntry={!showPassword}
                   placeholder="Contraseña"
                   placeholderTextColor="rgba(255,255,255,0.7)"
                   className="flex-1 py-4 px-2 text-white"
+                  editable={!loading}
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Text className="text-white text-lg"
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
                   accessibilityRole="button"
-                  accessibilityLabel={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>
-                    {showPassword ? (
+                  accessibilityLabel={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  disabled={loading}
+                >
+                  {showPassword ? (
                     <EyeOpen size={24} color="white" />
                   ) : (
                     <EyeClosed size={24} color="white" />
                   )}
-                  </Text>
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity
                 onPress={onLogin}
-                className="mt-6 w-full items-center rounded-2xl bg-white py-4">
-                <Text className="text-xl font-extrabold text-emerald-900">Iniciar Sesión</Text>
+                disabled={loading}
+                className={`mt-6 w-full items-center rounded-2xl ${loading ? 'bg-white/70' : 'bg-white'} py-4`}>
+                {loading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text className="text-xl font-extrabold text-emerald-900">Iniciar Sesión</Text>
+                )}
               </TouchableOpacity>
             </View>
 

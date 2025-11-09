@@ -32,7 +32,9 @@
     "react-native-screens": "~4.16.0",
     "react-native-svg": "^15.13.0",
     "expo-file-system": "~19.0.17",
-    "expo-sharing": "~14.0.7"
+    "expo-sharing": "~14.0.7",
+    "expo-intent-launcher": "~13.0.7",
+    "expo-linking": "~8.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
