@@ -179,27 +179,6 @@ export default function RegisterScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            {/* Otras opciones */}
-            <View className="mt-16 items-center">
-              <Text className="text-white/90 text-lg mb-4">Otras Opciones</Text>
-
-              <TouchableOpacity
-                onPress={onGoogle}
-                className="flex-row items-center gap-3 bg-white rounded-2xl px-5 py-3 mb-12"
-                activeOpacity={0.8}
-              >
-                <Image
-                  source={{
-                    uri: "https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg",
-                  }}
-                  style={{ width: 28, height: 28 }}
-                />
-                <Text className="text-emerald-900 text-lg font-semibold">
-                  Google
-                </Text>
-              </TouchableOpacity>
-            </View>
-
             {/* Link a login */}
             <View className="mt-auto mb-6 items-center">
               <View className="flex-row items-center">

@@ -156,7 +156,7 @@ export default function HomeScreen({ navigation }: any) {
       await downloadAndOpenMonthlyPdfExpo();
     } catch (e: any) {
       console.error(e);
-      Alert.alert('No se pudo abrir el PDF', e?.message ?? 'Error desconocido');
+      Alert.alert('No se pudo abrir el PDF', 'Por cuestiones de costos generaremos el informe mas adelante');
     }
   };
 
