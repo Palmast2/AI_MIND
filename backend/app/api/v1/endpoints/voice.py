@@ -10,8 +10,8 @@ router = APIRouter()
 async def chat_voice(file: UploadFile = File(...)
     ):
     """
-        Recibe un audio de voz del usuario, lo procesa y devuelve una respuesta en audio de la IA.
-        Ideal para interacción directa por voz sin texto intermedio.
+        Recibe un audio de voz del usuario, lo procesa y devuelve una respuesta estructurada (JSON).
+        Incluye la transcripción, la respuesta en texto y el audio de la IA listo para reproducir.
 
         **Flujo de Proceso:**
         1. **Escuchar:** Transcribe el audio recibido (Gpt-4o-transcribe).
@@ -20,44 +20,60 @@ async def chat_voice(file: UploadFile = File(...)
 
         **Request (Input):**
         - **Content-Type:** `multipart/form-data`
-        - **Body:** - `file`: Archivo de audio binario (Soporta: `.mp3`, `.wav`).
+        - **Body:** `file`: Archivo de audio binario (Soporta: `.mp3`, `.wav`).
         *Nota: El modelo actual NO soporta .ogg (WhatsApp directos).*
 
         **Respuesta (Output):**
-        - **Content-Type:** `audio/mpeg`
-        - **Body:** Archivo binario (Blob) listo para reproducirse.
-        - ⚠️ **NOTA IMPORTANTE:** Este endpoint NO devuelve JSON. Devuelve el stream de audio directo.
-        El Frontend debe recibirlo como `blob()` y crear un `URL.createObjectURL(blob)` para el reproductor.
+        - **Content-Type:** `application/json`
+        - **Body (JSON):**
+        {
+            "status": "success",
+            "user_transcription": "Texto que dijo el usuario (para su burbuja)",
+            "text_response": "Texto que responde la IA (para su burbuja)",
+            "audio_content": "SUQzBAAAAAAAI1RTU0..." // (Audio codificado en Base64)
+        }
+
+        **⚠️ NOTA PARA FRONTEND (Implementación):**
+        Este endpoint devuelve un JSON, NO un archivo binario directo.
+        1. Muestra `text_response` en el chat inmediatamente.
+        2. Reproduce el audio inyectando el Base64 así:
+        `const audio = new Audio("data:audio/mp3;base64," + response.audio_content);`
+        `audio.play();`
 
         **Errores Comunes:**
-        - **400:** Si envías un formato no soportado (ej. .ogg) o el audio está corrupto.
+        - **400:** Si envías un formato no soportado (ej. .ogg).
         - **500:** Error interno del servidor.
         """
     try:
-        # 1. Leer el archivo en memoria
-        contenido = await file.read()
-        
-        # 2: Detectamos la extensión real
-        ext = file.filename.split(".")[-1] if "." in file.filename else "mp3"
-        
-        # Le pasamos la extensión correcta
-        texto_transcrito = await transcribir_con_gpt4o(contenido, format=ext) 
-        
-        # 3. PENSAR
-        respuesta_full_object = await get_chat_response(texto_transcrito)
-        
-        # Extraemos solo el texto para poder convertirlo a voz
-        texto_para_hablar = respuesta_full_object.choices[0].message.content
-        
-        # 4. HABLAR (TTS)
-        # Le pasamos el texto limpio a la función de voz
-        audio_stream = await generar_voz_tts(texto_para_hablar)
-        
-        # Convertimos el stream en bytes sólidos. 
-        # Esto le permite al navegador saber cuánto dura el audio.
-        audio_bytes = audio_stream.getvalue()
-        
-        return Response(content=audio_bytes, media_type="audio/mpeg")
+            # 1. Leer el archivo de audio
+            contenido = await file.read()
+            ext = file.filename.split(".")[-1] if "." in file.filename else "mp3"
+            
+            # 2. ESCUCHAR 
+            # Transcribe lo que dijo el usuario
+            texto_usuario = await transcribir_con_gpt4o(contenido, format=ext) 
+            
+            # 3. PENSAR (GPT-4o)
+            # Obtiene la respuesta inteligente
+            respuesta_full = await get_chat_response(texto_usuario)
+            texto_ia = respuesta_full.choices[0].message.content
+            
+            # 4. HABLAR (TTS)
+            # Genera el audio de la respuesta
+            audio_stream = await generar_voz_tts(texto_ia)
+            
+            # Convertimos los bytes del audio a Base64
+            # Esto permite enviar el audio DENTRO del JSON
+            audio_base64 = base64.b64encode(audio_stream.getvalue()).decode('utf-8')
+            
+            # 5. RETORNAR EL PAQUETE COMPLETO
+            return {
+                "status": "success",
+                "user_transcription": texto_usuario, # Lo que el usuario dijo (para mostrar en su burbuja)
+                "text_response": texto_ia,           # La respuesta de la IA (para mostrar en la burbuja del bot)
+                "audio_content": audio_base64,       # El audio listo para reproducir
+                "content_type": "audio/mpeg"
+            }
 
     except Exception as e:
         print(f"Error en voice endpoint: {e}")
