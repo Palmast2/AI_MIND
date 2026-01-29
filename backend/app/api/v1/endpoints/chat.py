@@ -4,7 +4,7 @@ from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.core.openai_chat import chat_with_gpt
+from app.core.openai_chat import get_chat_response
 from app.crud.directrices import obtener_tecnicas, obtener_advertencias
 from app.core.ml_models import predict_emotion, map_emotion_for_pet, get_basic_emotion
 from app.core.emotion_map import map_emotion
@@ -100,8 +100,8 @@ async def chat_gpt(
 
     try:
         # 7️⃣ Llamar a GPT
-        gpt_response = chat_with_gpt(messages)
-        assistant_content = gpt_response["choices"][0]["message"]["content"]
+        gpt_response = await get_chat_response(messages)
+        assistant_content = gpt_response.choices[0].message.content
 
         # 8️⃣ Guardar respuesta de la IA en DB
         guardar_mensaje_historial(
