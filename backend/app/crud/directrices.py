@@ -18,7 +18,7 @@ def obtener_tecnicas(emocion: str, db: Session) -> str:
 
 def obtener_advertencias(emocion: str, db: Session) -> str:
     stmt = text("""
-        SELECT pgp_sym_decrypt(advertencias, :key) AS advertencias
+        SELECT pgp_sym_decrypt_bytea(advertencias, :key) AS advertencias
         FROM directrices_terapeuticas
         WHERE emocion = :emocion
         LIMIT 1

@@ -69,7 +69,7 @@ def obtener_directrices(db: Session):
             directriz, 
             actividades_practicas, 
             acciones_urgentes, 
-            pgp_sym_decrypt(advertencias, :key) AS advertencias,
+            pgp_sym_decrypt_bytea(advertencias, :key) AS advertencias,
             pgp_sym_decrypt(palabras_clave, :key) AS palabras_clave
         FROM directrices_terapeuticas
     """)
