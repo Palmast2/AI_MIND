@@ -1,5 +1,4 @@
 from dotenv import load_dotenv
-import logging
 import os
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,10 +20,6 @@ app = FastAPI(
     title="AI_MIND",
     version="1.0.0",
 )
-
-# Configuración de logging
-logging.basicConfig(level=logging.INFO)
-
 # Configuración de rate limit
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -50,9 +45,8 @@ def jwtdecode_exception_handler(request: Request, exc: JWTDecodeError):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        #"http://localhost:3000",  # Para desarrollo
-        #"https://tudominio.com"   # Para producción
-        "https://api.aimind.portablelab.work"
+        "http://localhost:3000",  # Para desarrollo
+        "https://tudominio.com"   # Para producción
     ],
     allow_credentials=True,
     allow_methods=["*"],
