@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import Response 
 from app.core.openai_audio import transcribir_con_gpt4o, generar_voz_tts
 from app.core.openai_chat import get_chat_response 
+import base64
 
 router = APIRouter()
 
