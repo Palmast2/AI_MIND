@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  Image,
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -18,6 +17,45 @@ import { EyeOpen } from "../icons/EyeOpen";
 
 type LoginResult = { ok: true } | { ok: false; error: string };
 
+// --------- Config de validación en cliente ----------
+const MAX_EMAIL_LEN = 128;
+const MAX_PASS_LEN = 128;
+
+// Email RFC 5322 lite (suficiente para app)
+const EMAIL_RX =
+  /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+
+// Patrones comunes de payloads SQLi (minificados)
+const SUSPICIOUS_PATTERNS: RegExp[] = [
+  /(\bor\b|\band\b)\s+(\d+\s*=\s*\d+|true|false|null)\b/i, // or 1=1, and 0=0
+  /\bunion\b\s+\bselect\b/i,
+  /\bdrop\b\s+(table|database)\b/i,
+  /\bdelete\b\s+from\b/i,
+  /\binsert\b\s+into\b/i,
+  /\bupdate\b\s+\w+\s+\bset\b/i,
+  /--/,          // comentario línea
+  /\/\*|\*\//,   // comentario bloque
+  /;/,           // separador de sentencias
+  /['"`\\]/,     // comillas, backticks, backslash
+];
+
+// Normaliza para validar
+function normalizeInput(s: string) {
+  return s
+    .normalize('NFKC') // forma canónica (evita homoglyphs básicos)
+    .trim();
+}
+
+function isValidEmail(email: string) {
+  return email.length <= MAX_EMAIL_LEN && EMAIL_RX.test(email);
+}
+
+function hasSuspiciousPayload(s: string) {
+  const low = s.toLowerCase();
+  return SUSPICIOUS_PATTERNS.some(rx => rx.test(low));
+}
+// ----------------------------------------------------
+
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,18 +63,42 @@ export default function LoginScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
 
   const onLogin = async () => {
-    if (!email || !password) {
+    // Normaliza entradas
+    const emailN = normalizeInput(email);
+    const passN = normalizeInput(password);
+
+    // Validaciones mínimas
+    if (!emailN || !passN) {
       Alert.alert('Campos requeridos', 'Ingresa tu correo y contraseña.');
       return;
     }
+    if (!isValidEmail(emailN)) {
+      Alert.alert('Correo inválido', 'Verifica el formato de tu correo.');
+      return;
+    }
+    if (passN.length > MAX_PASS_LEN) {
+      Alert.alert('Contraseña demasiado larga', `Máximo ${MAX_PASS_LEN} caracteres.`);
+      return;
+    }
+
+    // Detección de patrones sospechosos
+    if (hasSuspiciousPayload(emailN) || hasSuspiciousPayload(passN)) {
+      Alert.alert(
+        'Entrada no permitida',
+        'Se detectaron caracteres o patrones no permitidos.'
+      );
+      return;
+    }
+
     setLoading(true);
-    const result = await loginApi(email, password);
+    const result = await loginApi(emailN, passN);
     setLoading(false);
 
     if (result.ok) {
-      navigation.navigate('Home', { initialMessage: email, password });
+      // Por seguridad: no pases la contraseña a otras pantallas
+      setPassword('');
+      navigation.navigate('Home', { initialMessage: emailN });
     } else {
-      // Mensaje según el error devuelto
       Alert.alert('Inicio de sesión', result.error);
     }
   };
@@ -44,6 +106,7 @@ export default function LoginScreen({ navigation }: any) {
   const saveCookies = async (cookiesObj: Record<string, string>) => {
     try {
       await AsyncStorage.setItem('cookies', JSON.stringify(cookiesObj));
+      console.log(cookiesObj)
       console.log('✅ Cookies guardadas');
     } catch (e) {
       console.error('Error al guardar cookies', e);
@@ -56,23 +119,22 @@ export default function LoginScreen({ navigation }: any) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Puedes enviar un CSRF si tu backend lo usa para login también
+          // 'X-CSRF-TOKEN': token,
         },
-        // Nota: React Native ignora 'credentials', pero no estorba:
         credentials: 'include' as any,
+        // Enviar como JSON (no concatenes en querystring)
         body: JSON.stringify({ email, password }),
       });
 
-      // Manejo explícito de 401
       if (response.status === 401) {
         return { ok: false, error: 'Credenciales inválidas. Verifica tu correo y contraseña.' };
       }
-
-      // Cualquier otro estado de error
       if (!response.ok) {
-        return { ok: false, error: `No se pudo iniciar sesión. Credenciales no validas` };
+        return { ok: false, error: `No se pudo iniciar sesión. Credenciales no válidas.` };
       }
 
-      // Si todo bien: leer cookies (si vienen) y guardar
+      // Intenta extraer cookies si el backend las setea
       const setCookie = response.headers.get('set-cookie');
       if (setCookie) {
         const cookiesObj: Record<string, string> = {};
@@ -86,9 +148,6 @@ export default function LoginScreen({ navigation }: any) {
         await saveCookies(cookiesObj);
       }
 
-      // Consumir el cuerpo sólo en éxito
-      // (si necesitas datos del usuario, puedes usarlos aquí)
-      // const data = await response.json();
       return { ok: true };
     } catch (error) {
       console.error(error);
@@ -123,6 +182,7 @@ export default function LoginScreen({ navigation }: any) {
                 placeholderTextColor="rgba(255,255,255,0.7)"
                 className="w-full rounded-2xl border border-emerald-700 bg-emerald-800/60 px-5 py-4 text-white"
                 editable={!loading}
+                maxLength={MAX_EMAIL_LEN}
               />
 
               {/* Input de contraseña con botón de ojo */}
@@ -135,6 +195,10 @@ export default function LoginScreen({ navigation }: any) {
                   placeholderTextColor="rgba(255,255,255,0.7)"
                   className="flex-1 py-4 px-2 text-white"
                   editable={!loading}
+                  maxLength={MAX_PASS_LEN}
+                  textContentType="password"
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}

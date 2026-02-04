@@ -1,22 +1,25 @@
-import React, { useMemo, useRef, useState, useLayoutEffect } from 'react';
+import React, { useMemo, useRef, useState, useLayoutEffect, useEffect } from 'react';
 import {
   View,
   Image,
   TextInput,
   TouchableWithoutFeedback,
   Keyboard,
-  findNodeHandle,
   Text,
   TouchableOpacity,
   Platform,
   Alert,
   Modal,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  KeyboardEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { RadarChart } from 'react-native-gifted-charts';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -24,14 +27,11 @@ import * as Linking from 'expo-linking';
 
 import { SKINS, STORAGE_KEY } from './skins';
 
-// Utilidad: año/mes actuales (1..12)
 function getCurrentYearMonth() {
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-// === GET /pdf/{year}/{month} usando fetch (respeta cookies) -> guardar -> compartir
-// Convierte ArrayBuffer -> Base64 (fallback si no hay Buffer)
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
   const bytes = new Uint8Array(buffer);
@@ -46,12 +46,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   if (i < bytes.length) {
     base64 += chars[bytes[i] >> 2];
     if (i === bytes.length - 1) {
-      base64 += chars[(bytes[i] & 3) << 4];
-      base64 += '==';
+      base64 += chars[(bytes[i] & 3) << 4] + '==';
     } else {
       base64 += chars[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)];
-      base64 += chars[(bytes[i + 1] & 15) << 2];
-      base64 += '=';
+      base64 += chars[(bytes[i + 1] & 15) << 2] + '=';
     }
   }
   return base64;
@@ -106,19 +104,14 @@ export async function downloadAndOpenMonthlyPdfExpo(): Promise<void> {
     throw new Error(`PDF status ${resp.status}`);
   }
 
-  // Guardar binario como Base64
   const buffer = await resp.arrayBuffer();
   const base64 =
-    typeof Buffer !== 'undefined'
-      ? Buffer.from(buffer).toString('base64')
-      : arrayBufferToBase64(buffer);
+    typeof Buffer !== 'undefined' ? Buffer.from(buffer).toString('base64') : arrayBufferToBase64(buffer);
 
   const fileName = `informe-${year}-${String(month).padStart(2, '0')}.pdf`;
   const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
 
-  await FileSystem.writeAsStringAsync(fileUri, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
 
   const info = await FileSystem.getInfoAsync(fileUri);
   if (!info.exists || (info.size ?? 0) < 100) {
@@ -126,7 +119,6 @@ export async function downloadAndOpenMonthlyPdfExpo(): Promise<void> {
     throw new Error('PDF muy pequeño o inexistente');
   }
 
-  // 👇 Abrir directamente el PDF
   try {
     if (Platform.OS === 'android') {
       const contentUri = await FileSystem.getContentUriAsync(fileUri);
@@ -136,45 +128,29 @@ export async function downloadAndOpenMonthlyPdfExpo(): Promise<void> {
         flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
       });
     } else {
-      // iOS (y también funciona en Android en muchos casos)
       await Linking.openURL(fileUri);
     }
   } catch (err) {
     console.error('Error abriendo PDF:', err);
-    // Respaldo: menú de compartir
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'application/pdf',
-        UTI: 'com.adobe.pdf',
-        dialogTitle: 'Informe mensual',
-      });
-    } else {
-      Alert.alert('PDF descargado', `Guardado en: ${fileUri}`);
-    }
+    Alert.alert('PDF descargado', `Guardado en: ${fileUri}`);
   }
 }
 
-
-// === GET emociones/semanales (mantiene tus headers y cookies)
 async function fetchWeeklyEmotions(): Promise<number[]> {
-  // Devuelve [Tristeza, Alegría, Tranquilidad, Sorpresa, Otros]
   const cookiesString = await AsyncStorage.getItem('cookies');
   if (!cookiesString) throw new Error('No se encontraron cookies guardadas');
 
   const cookies = JSON.parse(cookiesString);
   const token = cookies.csrf_access_token;
 
-  const resp = await fetch(
-    'https://api.aimind.portablelab.work/api/v1/emociones/semanales',
-    {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': token,
-      },
-      credentials: 'include',
-    }
-  );
+  const resp = await fetch('https://api.aimind.portablelab.work/api/v1/emociones/semanales', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': token,
+    },
+    credentials: 'include',
+  });
 
   if (!resp.ok) throw new Error(`Error emociones: ${resp.status}`);
 
@@ -192,13 +168,14 @@ async function fetchWeeklyEmotions(): Promise<number[]> {
 
 export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+
   const [isFocused, setIsFocused] = useState(false);
   const [text, setText] = useState('');
 
   const [skinKey, setSkinKey] = useState<string>('default');
   const [remoteUri, setRemoteUri] = useState<string | null>(null);
 
-  // RadarChart
   const [radarValues, setRadarValues] = useState<number[]>([0, 0, 0, 0, 0]);
   const radarLabels = ['Tristeza', 'Alegría', 'Tranquilidad', 'Sorpresa', 'Otros'];
   const [radarDataLabels, setRadarDataLabels] = useState<string[]>(['0', '0', '0', '0', '0']);
@@ -206,10 +183,22 @@ export default function HomeScreen({ navigation }: any) {
   const scrollRef = useRef<any>(null);
   const inputRef = useRef<any>(null);
 
-  // Estado para modal de carga
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // Botón Informe -> descarga y abre el PDF (no navegamos a 'Informe')
+  // 🔽 Altura dinámica del teclado en Android para mover SOLO el composer
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const onShow = (e: NativeSyntheticEvent<KeyboardEvent>) => setKeyboardHeight(e.endCoordinates.height);
+    const onHide = () => setKeyboardHeight(0);
+    const s1 = Keyboard.addListener('keyboardDidShow', onShow);
+    const s2 = Keyboard.addListener('keyboardDidHide', onHide);
+    return () => {
+      s1.remove();
+      s2.remove();
+    };
+  }, []);
+
   const handleInformePress = async () => {
     try {
       setIsDownloading(true);
@@ -226,14 +215,10 @@ export default function HomeScreen({ navigation }: any) {
     navigation.setOptions({
       headerRight: () => (
         <View className='flex flex-row'>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Skins')}
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('Skins')} style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
             <Text style={{ color: '#fff', fontWeight: '600' }}>Skins</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleInformePress}
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+          <TouchableOpacity onPress={handleInformePress} style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
             <Text style={{ color: '#fff', fontWeight: '600' }}>Informe</Text>
           </TouchableOpacity>
         </View>
@@ -244,7 +229,7 @@ export default function HomeScreen({ navigation }: any) {
     });
   }, [navigation]);
 
-  // Carga de SKINS
+  // Carga skin guardada
   useFocusEffect(
     React.useCallback(() => {
       let isActive = true;
@@ -272,13 +257,11 @@ export default function HomeScreen({ navigation }: any) {
           setRemoteUri(null);
         }
       })();
-      return () => {
-        isActive = false;
-      };
+      return () => { isActive = false; };
     }, [])
   );
 
-  // Cargar emociones al enfocar la pantalla
+  // Carga emociones
   useFocusEffect(
     React.useCallback(() => {
       let mounted = true;
@@ -295,9 +278,7 @@ export default function HomeScreen({ navigation }: any) {
           setRadarDataLabels(['0', '0', '0', '0', '0']);
         }
       })();
-      return () => {
-        mounted = false;
-      };
+      return () => { mounted = false; };
     }, [])
   );
 
@@ -308,12 +289,8 @@ export default function HomeScreen({ navigation }: any) {
 
   const handleFocus = () => {
     setIsFocused(true);
-    requestAnimationFrame(() => {
-      const node = findNodeHandle(inputRef.current);
-      scrollRef.current?.scrollToFocusedInput?.(node);
-    });
+    // ⛔️ Ya NO usamos scrollToFocusedInput para que el contenido no se mueva
   };
-
   const handleBlur = () => setIsFocused(false);
 
   const handleSend = () => {
@@ -323,6 +300,9 @@ export default function HomeScreen({ navigation }: any) {
     navigation.navigate('Chat', { initialMessage: msg });
     setText('');
   };
+
+  // Tamaño del composer para no tapar contenido
+  const [composerHeight, setComposerHeight] = useState(72);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#00634C' }}>
@@ -334,18 +314,16 @@ export default function HomeScreen({ navigation }: any) {
             flexGrow: 1,
             paddingTop: 16,
             paddingHorizontal: 16,
-            paddingBottom: isFocused ? 8 : insets.bottom + 16,
+            // deja espacio para el composer fijo (no se moverá con el teclado)
+            paddingBottom: composerHeight + 16 + insets.bottom,
           }}
           enableOnAndroid
-          enableAutomaticScroll={false}
+          enableAutomaticScroll={false}  // ⛔️ desactivado para que no empuje el layout
           enableResetScrollToCoords={false}
           keyboardOpeningTime={0}
           keyboardShouldPersistTaps="handled"
-          extraScrollHeight={12}
-          extraHeight={0}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}>
-
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           {/* Radar de emociones */}
           <View style={{ width: 25, height: 25, alignSelf: 'center', transform: [{ scale: 0.5 }] }}>
             <RadarChart
@@ -358,13 +336,25 @@ export default function HomeScreen({ navigation }: any) {
             />
           </View>
 
-          <View style={{ flex: 1 }}>
-            {/* Imagen */}
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <Image source={imageSource} style={{ width: 300, height: 300 }} resizeMode="contain" />
-            </View>
+          {/* Imagen del pet (ya no se moverá con el teclado) */}
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Image source={imageSource} style={{ width: 300, height: 300 }} resizeMode="contain" />
+          </View>
+        </KeyboardAwareScrollView>
+      </TouchableWithoutFeedback>
 
-            {/* Input burbuja */}
+      {/* Composer FIJO (solo esto sube) */}
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={headerHeight + insets.top}>
+          <View
+            onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
+            style={{
+              position: 'absolute',
+              left: 16,
+              right: 16,
+              bottom: insets.bottom + 8, // iOS lo levanta KAV
+            }}
+          >
             <View
               style={{
                 alignSelf: 'stretch',
@@ -378,12 +368,15 @@ export default function HomeScreen({ navigation }: any) {
                 shadowRadius: 4,
                 elevation: 3,
                 marginBottom: 8,
+                flexDirection: 'row',
+                alignItems: 'center',
               }}>
               <TextInput
                 ref={inputRef}
                 placeholder="¿Cómo ha estado tu día?"
                 placeholderTextColor="#00634C"
                 style={{
+                  flex: 1,
                   color: '#00634C',
                   fontSize: 16,
                   minHeight: 40,
@@ -400,14 +393,79 @@ export default function HomeScreen({ navigation }: any) {
                 onSubmitEditing={handleSend}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                onKeyPress={({ nativeEvent }) => {
-                  if (nativeEvent.key === 'Enter') handleSend();
-                }}
               />
+
+              <TouchableOpacity
+                onPress={handleSend}
+                disabled={!text.trim()}
+                style={{ marginLeft: 8, borderRadius: 999, backgroundColor: '#0b7', paddingHorizontal: 16, paddingVertical: 10 }}
+              >
+                <Text style={{ color: 'white', fontWeight: '700' }}>Enviar</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAwareScrollView>
-      </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      ) : (
+        // ANDROID: movemos SOLO el composer con la altura del teclado
+        <View
+          onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
+          style={{
+            position: 'absolute',
+            left: 16,
+            right: 16,
+            bottom: insets.bottom + 8 + keyboardHeight,
+          }}
+        >
+          <View
+            style={{
+              alignSelf: 'stretch',
+              width: '100%',
+              backgroundColor: 'white',
+              borderRadius: 24,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              shadowColor: '#000',
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 3,
+              marginBottom: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}>
+            <TextInput
+              ref={inputRef}
+              placeholder="¿Cómo ha estado tu día?"
+              placeholderTextColor="#00634C"
+              style={{
+                flex: 1,
+                color: '#00634C',
+                fontSize: 16,
+                minHeight: 40,
+                maxHeight: 140,
+                textAlignVertical: 'top',
+              }}
+              value={text}
+              onChangeText={setText}
+              multiline
+              numberOfLines={1}
+              scrollEnabled
+              returnKeyType="send"
+              blurOnSubmit={true}
+              onSubmitEditing={handleSend}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            />
+
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!text.trim()}
+              style={{ marginLeft: 8, borderRadius: 999, backgroundColor: '#0b7', paddingHorizontal: 16, paddingVertical: 10 }}
+            >
+              <Text style={{ color: 'white', fontWeight: '700' }}>Enviar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Modal de carga para la descarga/generación del PDF */}
       <Modal visible={isDownloading} transparent animationType="fade" statusBarTranslucent>

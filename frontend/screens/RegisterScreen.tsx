@@ -18,6 +18,37 @@ type RegisterResult =
   | { ok: true; message?: string }
   | { ok: false; message: string };
 
+/* ========= Validaciones anti-payloads (cliente) ========= */
+const MAX_EMAIL_LEN = 128;
+const MAX_PASS_LEN = 128;
+
+const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+
+const SUSPICIOUS_PATTERNS: RegExp[] = [
+  /(\bor\b|\band\b)\s+(\d+\s*=\s*\d+|true|false|null)\b/i, // or 1=1, and 0=0
+  /\bunion\b\s+\bselect\b/i,
+  /\bdrop\b\s+(table|database)\b/i,
+  /\bdelete\b\s+from\b/i,
+  /\binsert\b\s+into\b/i,
+  /\bupdate\b\s+\w+\s+\bset\b/i,
+  /--/,          // comentario línea
+  /\/\*|\*\//,   // comentario bloque
+  /;/,           // separador de sentencias
+  /['"`\\]/,     // comillas / backslash
+];
+
+function normalizeInput(s: string) {
+  return s.normalize("NFKC").trim();
+}
+function isValidEmail(email: string) {
+  return email.length <= MAX_EMAIL_LEN && EMAIL_RX.test(email);
+}
+function hasSuspiciousPayload(s: string) {
+  const low = s.toLowerCase();
+  return SUSPICIOUS_PATTERNS.some((rx) => rx.test(low));
+}
+/* ======================================================== */
+
 function PasswordInput({
   value,
   onChangeText,
@@ -49,6 +80,7 @@ function PasswordInput({
         importantForAutofill="yes"
         className="flex-1 py-4 px-2 text-white"
         testID={testID ? `${testID}-input` : undefined}
+        maxLength={MAX_PASS_LEN}
       />
       <TouchableOpacity
         onPress={() => setShow(!show)}
@@ -72,32 +104,53 @@ export default function RegisterScreen({ navigation }: any) {
   const passwordsMatch = password.length > 0 && password === passwordConfirm;
 
   const onRegister = async () => {
-    if (!email || !password) {
+    // Normaliza entradas
+    const emailN = normalizeInput(email);
+    const passN = normalizeInput(password);
+    const passCN = normalizeInput(passwordConfirm);
+
+    // Reglas mínimas
+    if (!emailN || !passN) {
       Alert.alert("Campos requeridos", "Ingresa tu correo y contraseña.");
       return;
     }
-    if (!passwordsMatch) {
+    if (!isValidEmail(emailN)) {
+      Alert.alert("Correo inválido", "Verifica el formato de tu correo.");
+      return;
+    }
+    if (passN.length > MAX_PASS_LEN) {
+      Alert.alert("Contraseña demasiado larga", `Máximo ${MAX_PASS_LEN} caracteres.`);
+      return;
+    }
+    if (passN !== passCN) {
       Alert.alert("Validación", "Las contraseñas no coinciden.");
+      return;
+    }
+
+    // Bloqueo de patrones sospechosos
+    if (hasSuspiciousPayload(emailN) || hasSuspiciousPayload(passN)) {
+      Alert.alert("Entrada no permitida", "Se detectaron patrones no permitidos.");
       return;
     }
 
     try {
       setLoading(true);
-      const result = await registerApi(email, password);
+      const result = await registerApi(emailN, passN);
       setLoading(false);
 
       if (result.ok) {
-        // Mostrar confirmación y navegar SOLO cuando el usuario acepte
         Alert.alert(
           "Registro exitoso",
           result.message || "Tu cuenta fue creada correctamente.",
           [
             {
               text: "Aceptar",
-              onPress: () =>
-                navigation.navigate("Login", {
-                  initialMessage: email,
-                }),
+              onPress: () => {
+                // No pases password a otras pantallas
+                setPassword("");
+                setPasswordConfirm("");
+                navigation.navigate("Login", { initialMessage: emailN });
+              },
             },
           ],
           { cancelable: false }
@@ -116,15 +169,14 @@ export default function RegisterScreen({ navigation }: any) {
       const response = await fetch("https://api.aimind.portablelab.work/api/v1/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // credentials: 'include' as any, // si tu backend setea cookies en registro
         body: JSON.stringify({ email, password }),
       });
 
-      // Manejo de estados comunes
       if (response.status === 409) {
         return { ok: false, message: "El correo ya está registrado." };
       }
       if (response.status === 400 || response.status === 422) {
-        // Si el backend envía detalle de validación en JSON
         let detail = "";
         try {
           const err = await response.json();
@@ -136,16 +188,12 @@ export default function RegisterScreen({ navigation }: any) {
         return { ok: false, message: `Error del servidor.` };
       }
 
-      // Éxito
-      // Puedes leer algún mensaje/usuario si lo devuelve el backend
       let msg: string | undefined = undefined;
       try {
         const data = await response.json();
         msg = data?.message;
         console.log("registerApi:", data);
-      } catch {
-        // si no hay cuerpo JSON, no pasa nada
-      }
+      } catch {}
       return { ok: true, message: msg };
     } catch (error) {
       console.error("Hubo un error al llamar a la API", error);
@@ -185,6 +233,7 @@ export default function RegisterScreen({ navigation }: any) {
                 textContentType="emailAddress"
                 autoCorrect={false}
                 editable={!loading}
+                maxLength={MAX_EMAIL_LEN}
               />
 
               <PasswordInput

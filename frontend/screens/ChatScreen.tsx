@@ -49,6 +49,36 @@ export default function ChatScreen({ route }: any) {
 
   const append = (m: Msg) => setMessages(prev => [...prev, m]);
 
+  const saveCookies = async (cookiesObj: Record<string, string>) => {
+    try {
+      await AsyncStorage.setItem('cookies', JSON.stringify(cookiesObj));
+      console.log(cookiesObj)
+      console.log('✅ Cookies guardadas');
+    } catch (e) {
+      console.error('Error al guardar cookies', e);
+    }
+  };
+
+  const parseSetCookieHeader = (setCookie: string): Record<string, string> => {
+    const cookiesObj: Record<string, string> = {};
+    setCookie
+      .split(/,(?=[^;]+=[^;]+)/g)
+      .forEach((cookieStr) => {
+        const [pair] = cookieStr.split(";");
+        const [name, value] = pair.split("=").map((s) => s.trim());
+        if (name) cookiesObj[name] = value ?? "";
+      });
+    return cookiesObj;
+  };
+
+  const mergeAndSaveCookies = async (newCookies: Record<string, string>) => {
+  const prev = await AsyncStorage.getItem("cookies");
+  const prevObj = prev ? JSON.parse(prev) : {};
+  const merged = { ...prevObj, ...newCookies };
+  await saveCookies(merged); // tu función existente
+  return merged;
+};
+
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => {
       (listRef.current as any)?.scrollToOffset?.({
@@ -115,46 +145,107 @@ export default function ChatScreen({ route }: any) {
 
   // Llamada real a API
   // Debe devolver texto + emoción; ajusta si tu backend cambia
-  const callAPI = async (userMessage: string): Promise<{ content: string; emotion: EmotionKey | null }> => {
+  const refreshTokens = async (): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const cookiesString  = await AsyncStorage.getItem('cookies');
+      const cookiesString = await AsyncStorage.getItem("cookies");
+      if (!cookiesString) return { ok: false, error: "No hay cookies guardadas" };
+
+      const cookies = JSON.parse(cookiesString);
+
+      // 🔑 Este es el CSRF para refresh (cookie csrf_refresh_token)
+      const refreshCsrf = cookies.csrf_refresh_token;
+      if (!refreshCsrf) return { ok: false, error: "Falta csrf_refresh_token" };
+
+      const response = await fetch("https://api.aimind.portablelab.work/api/v1/refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": refreshCsrf,
+        },
+        credentials: "include" as any,
+      });
+
+      // Rate limit / inválido / expirado, etc.
+      if (!response.ok) {
+        const txt = await response.text().catch(() => "");
+        return { ok: false, error: `Refresh falló (${response.status}): ${txt}` };
+      }
+
+      // Si el backend devuelve set-cookie (a veces NO lo verás en RN)
+      const setCookie = response.headers.get("set-cookie");
+      if (setCookie) {
+        const cookiesObj = parseSetCookieHeader(setCookie);
+        await mergeAndSaveCookies(cookiesObj);
+      }
+
+      return { ok: true };
+    } catch (e) {
+      console.error(e);
+      return { ok: false, error: "Error inesperado en refreshTokens" };
+    }
+  };
+
+  const callAPI = async (
+  userMessage: string
+): Promise<{ content: string; emotion: EmotionKey | null }> => {
+  try {
+    // Helper interno para no repetir lógica
+    const doChatRequest = async () => {
+      const cookiesString = await AsyncStorage.getItem("cookies");
       if (!cookiesString) throw new Error("No se encontraron cookies guardadas");
 
       const cookies = JSON.parse(cookiesString);
       const token = cookies.csrf_access_token;
+      if (!token) throw new Error("Falta csrf_access_token");
 
-      const response = await fetch("https://api.aimind.portablelab.work/api/v1/chat", {
+      return fetch("https://api.aimind.portablelab.work/api/v1/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-CSRF-TOKEN": token,
         },
         body: JSON.stringify({ user_message: userMessage }),
-        credentials: 'include',
+        credentials: "include" as any,
       });
+    };
 
-      if (!response.ok) {
-        throw new Error(`Error en la petición: ${response.status}`);
+    // 1) Primer intento
+    let response = await doChatRequest();
+
+    // 2) Si es 401 => refresh + retry
+    if (response.status === 401) {
+      const refreshed = await refreshTokens(); // tu const de refresh
+
+      // Si refresh falló, ya no reintentes chat
+      if (!refreshed.ok) {
+        throw new Error(`Refresh falló: ${refreshed.error ?? "desconocido"}`);
       }
 
-      const data = await response.json();
-
-      // Según ejemplo que compartiste:
-      // { prompt: "...", response: {...}, emocion_pet: "comprensión" }
-      const emotionRaw: string | null = data?.emocion_pet ?? null;
-      const emotionNorm = normalizeEmotion(emotionRaw);  // "comprensión" -> "comprension"
-
-      // Texto del asistente (ajusta si tu payload difiere)
-      const content: string =
-        data?.response?.choices?.[0]?.message?.content ??
-        "Gracias por compartir. ¿Quieres contarme un poco más?";
-
-      return { content, emotion: emotionNorm };
-    } catch (error) {
-      console.error(error);
-      return { content: "Hubo un error al llamar a la API", emotion: null };
+      // Reintento (una sola vez)
+      response = await doChatRequest();
     }
-  };
+
+    // 3) Si sigue fallando (401 u otro status), ahora sí truena
+    if (!response.ok) {
+      throw new Error(`Error en la petición: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    const emotionRaw: string | null = data?.emocion_pet ?? null;
+    const emotionNorm = normalizeEmotion(emotionRaw);
+
+    const content: string =
+      data?.response?.choices?.[0]?.message?.content ??
+      "Gracias por compartir. ¿Quieres contarme un poco más?";
+
+    return { content, emotion: emotionNorm };
+  } catch (error) {
+    console.error(error);
+    return { content: "Hubo un error al llamar a la API", emotion: null };
+  }
+};
+
 
   const sendMessage = useCallback(
     async (payload?: string) => {
@@ -285,6 +376,9 @@ export default function ChatScreen({ route }: any) {
               <Text className="font-semibold text-white">Enviar</Text>
             </TouchableOpacity>
           </View>
+        </View>
+        <View>
+
         </View>
 
         <View style={{ height: insets.bottom }} />
