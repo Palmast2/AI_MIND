@@ -4,8 +4,7 @@ from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-# Importamos la función corregida
-from app.core.openai_chat import get_chat_response 
+from app.core.openai_chat import get_chat_response
 from app.crud.directrices import obtener_tecnicas, obtener_advertencias
 from app.core.ml_models import predict_emotion, map_emotion_for_pet, get_basic_emotion
 from app.core.emotion_map import map_emotion
@@ -64,6 +63,7 @@ async def chat_gpt(
 ):
     """
     Genera una respuesta empática basada en el mensaje del usuario y su emoción detectada.
+    Devuelve la emoción que debe mostrar la mascota virtual.
     Guarda todo el historial en base de datos y lo reconstruye en cada petición.
 
     **Requiere autenticación por cookies y protección CSRF:**
@@ -77,6 +77,7 @@ async def chat_gpt(
     **Respuesta:**
     - prompt (str): Prompt generado para el modelo.
     - response (dict): Respuesta generada por el modelo.
+    - emocion_pet (str): Emoción básica mapeada para la mascota virtual.
     - error (str, opcional): Mensaje de error si ocurre algún problema.
     
     """
@@ -88,7 +89,12 @@ async def chat_gpt(
     # 1️⃣ Detectar emoción principal
     user_message = chat_request.user_message
     emotion_result = predict_emotion(user_message)
+
     emocion_detectada = map_emotion(emotion_result, user_message=user_message)
+
+    emocion_detectada_pet = get_basic_emotion(emotion_result)
+
+    emocion_pet = map_emotion_for_pet(emocion_detectada_pet)
 
     # 2️⃣ Consultar técnicas y advertencias en base de datos
     raw_tecnicas = obtener_tecnicas(emocion_detectada, db)
@@ -148,21 +154,19 @@ async def chat_gpt(
         messages.append({"role": msg["role"], "content": msg["content"]})
 
     try:
-            # 7️⃣ Llamar a GPT (CORREGIDO con await)
-            gpt_response = await get_chat_response(messages)
-            
-            # Usamos notación de punto (.) para objetos OpenAI v1
-            assistant_content = gpt_response.choices[0].message.content
+        # 7️⃣ Llamar a GPT
+        gpt_response = await get_chat_response(messages)
+        assistant_content = gpt_response.choices[0].message.content
 
-            # 8️⃣ Guardar respuesta de la IA en DB
-            guardar_mensaje_historial(
-                db=db,
-                user_id=user_id,
-                role="assistant",
-                content=assistant_content,
-                emocion_detectada=emocion_detectada,
-                modelo_utilizado="gpt-4"
-            )
+        # 8️⃣ Guardar respuesta de la IA en DB
+        guardar_mensaje_historial(
+            db=db,
+            user_id=user_id,
+            role="assistant",
+            content=assistant_content,
+            emocion_detectada=emocion_detectada,
+            modelo_utilizado="gpt-4"
+        )
 
         return {
             "prompt": prompt,
