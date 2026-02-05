@@ -152,12 +152,6 @@ async def chat_gpt(
     # Agregamos el historial (que ya trae el mensaje del usuario al final)
     for msg in historial:
         messages.append({"role": msg["role"], "content": msg["content"]})
-        
-    # DEBUG: Para que veas que ahora SÍ se manda
-    print("\n--- 🕵️ DEBUG MEJORADO: LO QUE SE ENVÍA A OPENAI ---")
-    import json
-    print(json.dumps(messages, indent=2, ensure_ascii=False))
-    print("------------------------------------------\n")
 
     try:
         # 7️⃣ Llamar a GPT
