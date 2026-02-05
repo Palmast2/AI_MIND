@@ -1,8 +1,13 @@
 import os
 from openai import AsyncOpenAI
+from functools import lru_cache
 # from app.core.config import settings
 
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+@lru_cache(maxsize=1)
+def get_openai_client():
+    return AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+client = get_openai_client()
 
 async def get_chat_response(input_data):
     """
