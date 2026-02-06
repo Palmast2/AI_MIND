@@ -1,43 +1,28 @@
-import base64
 import io
 from openai import AsyncOpenAI
 from app.core.config import settings 
 
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-async def transcribir_con_gpt4o(file_bytes: bytes, format: str = "mp3") -> str:
+async def transcribir_con_whisper(file_bytes: bytes, filename: str) -> str:
     """
-    Opción Premium ($0.006/min): Usa la inteligencia de GPT-4o para escuchar.
-    Ideal para entender contexto, jerga o audios difíciles.
+    Opción Estándar (Whisper-1): El mejor para transcripción pura.
+    Soporta: mp3, mp4, mpeg, mpga, m4a, wav, webm, y OGG (WhatsApp).
     """
-    # 1. Codificar el audio a Base64 (Requisito para GPT-4o Audio)
-    audio_b64 = base64.b64encode(file_bytes).decode('utf-8')
+    # 1. Crear un objeto de archivo en memoria
+    audio_file = io.BytesIO(file_bytes)
+    
+    # 2. Asignar el nombre con extensión (Vital para que Whisper detecte el formato)
+    audio_file.name = filename 
 
-    # 2. Llamada al modelo "Smart" (Chat Completions con Audio)
-    response = await client.chat.completions.create(
-        model="gpt-4o-audio-preview", # Este es el nombre técnico del modelo "gpt-4o-transcribe"
-        modalities=["text"], # Le pedimos que solo responda con texto (la transcripción)
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    { 
-                        "type": "text", 
-                        "text": "Transcribe el siguiente audio exactamente palabra por palabra. No añadidas descripciones, solo el texto hablado." 
-                    },
-                    {
-                        "type": "input_audio", 
-                        "input_audio": {
-                            "data": audio_b64, 
-                            "format": format # "wav" o "mp3"
-                        }
-                    }
-                ]
-            }
-        ]
+    # 3. Llamada a Whisper
+    transcription = await client.audio.transcriptions.create(
+        model="whisper-1", 
+        file=audio_file,
+        language="es" # Forzar español mejora la precisión
     )
     
-    return response.choices[0].message.content
+    return transcription.text
 
 async def generar_voz_tts(texto: str) -> io.BytesIO:
     """
