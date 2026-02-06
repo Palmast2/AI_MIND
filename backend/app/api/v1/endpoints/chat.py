@@ -2,6 +2,7 @@ import logging, json
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
+from fastapi.concurrency import run_in_threadpool
 
 from app.database import get_db
 from app.core.openai_chat import get_chat_response
@@ -88,7 +89,7 @@ async def chat_gpt(
 
     # 1️⃣ Detectar emoción principal
     user_message = chat_request.user_message
-    emotion_result = predict_emotion(user_message)
+    emotion_result = await run_in_threadpool(predict_emotion, user_message)
 
     emocion_detectada = map_emotion(emotion_result, user_message=user_message)
 
