@@ -3,12 +3,17 @@ from app.crud.message import guardar_mensaje
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-MAX_HISTORY = 3  # cantidad máxima de pares usuario-IA
+MAX_HISTORY = 3  # Queremos 3 pares de conversación (Usuario-IA)
 
 def obtener_historial_usuario(db: Session, user_id: str, limite: int = MAX_HISTORY):
     """
-    Obtiene los últimos 'limite' pares de mensajes (usuario + IA) de la base de datos.
+    Obtiene los últimos mensajes.
+    IMPORTANTE: Multiplica el límite por 2 para traer PARES completos.
     """
+    
+    limit_sql = limite * 2  
+    # Si pides 3, esto lo convierte en 6 (para traer 3 idas y vueltas)
+
     stmt = text("""
         SELECT role, pgp_sym_decrypt(contenido, :key) AS contenido
         FROM mensajes
@@ -16,25 +21,24 @@ def obtener_historial_usuario(db: Session, user_id: str, limite: int = MAX_HISTO
         ORDER BY created_at DESC
         LIMIT :limite
     """)
+    
     resultados = db.execute(stmt, {
         "user_id": user_id,
         "key": os.getenv("PGP_KEY"),
-        "limite": limite * 2  # trae pares usuario-IA
+        "limite": limit_sql # Usamos el límite multiplicado
     }).mappings().all()
 
-    # Solo devolver pares alternados para que no se repita un mismo rol
     pares = []
-    ultimo_role = None
+    
     for r in reversed(resultados):
-        if r["role"] != ultimo_role:
-            pares.append({"role": r["role"], "content": r["contenido"]})
-            ultimo_role = r["role"]
+        pares.append({"role": r["role"], "content": r["contenido"]})
+            
     return pares
 
 def guardar_mensaje_historial(db: Session, user_id: str, role: str, content: str,
                                emocion_detectada: str, modelo_utilizado: str, consentimiento=True):
     """
-    Guarda un mensaje en la base de datos, asegurando que no se guarde 'otros' o "others" como emoción.
+    Guarda un mensaje en la base de datos, normalizando emociones desconocidas.
     """
     if emocion_detectada in ["otros", "others"]:
         emocion_detectada = "tranquilidad"
@@ -49,13 +53,11 @@ def guardar_mensaje_historial(db: Session, user_id: str, role: str, content: str
         consentimiento=consentimiento
     )
 
-
 def build_prompt(db: Session, user_id: str, emocion: str, tecnicas: str, advertencias: str) -> str:
-    """
-    Construye el prompt concatenando mensajes del historial de la BD más el contexto emocional.
-    """
+    # Este usa MAX_HISTORY (3), que gracias a la función de arriba se convierte en 6.
     history = obtener_historial_usuario(db, user_id, MAX_HISTORY)
     conversation = ""
+    
     for msg in history:
         if msg["role"] == "user":
             conversation += f"Usuario: {msg['content']}\n"
