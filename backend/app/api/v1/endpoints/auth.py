@@ -3,13 +3,16 @@ from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from datetime import timedelta
 from fastapi_jwt_auth import AuthJWT
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from google.auth.exceptions import GoogleAuthError
 from app.schemas.user import UserCreate, UserLogin, UserOut
-from app.schemas.auth import AccessResponse, GoogleTokenRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.schemas.auth import AccessResponse, GoogleTokenRequest, ForgotPasswordRequest, ResetPasswordRequest, LoginResponse
 from app.crud.user import get_user_by_email, create_user, update_user_password
+from app.crud.demograficos import get_demografico_by_user_id
+from app.schemas.demograficos import DemograficoOut
 from app.core.security import verify_password, get_password_hash
 from app.core.utils import generate_reset_token, verify_reset_token, send_reset_email
 from app.database import get_db
@@ -145,7 +148,7 @@ def register(user: UserCreate, request: Request, Authorize: AuthJWT = Depends(),
     )
     return response
 
-@router.post("/login", response_model=AccessResponse)
+@router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute", key_func=get_remote_address)
 def login(
     user: UserLogin,
@@ -162,6 +165,7 @@ def login(
 
     **Respuesta:**
     - msg (str): Mensaje de éxito.
+    - user (LoginUserContext): Contexto del usuario logueado.
     - Setea cookies: `access_token_cookie`, `refresh_token_cookie`, `csrf_access_token`, `csrf_refresh_token`.
 
     **Errores:**
@@ -177,7 +181,19 @@ def login(
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     access_token = Authorize.create_access_token(subject=str(db_user.user_id), expires_time=900)  # 15 minutos
     refresh_token = Authorize.create_refresh_token(subject=str(db_user.user_id), expires_time=86400)  # 1 día
-    response = JSONResponse(content={"msg": "Login exitoso"})
+    demograficos_obj = get_demografico_by_user_id(db, db_user.user_id)
+    if demograficos_obj:
+        demograficos_data = DemograficoOut.from_orm(demograficos_obj).dict(
+            exclude={"demografico_id", "user_id", "created_at", "updated_at"}
+        )
+    else:
+        demograficos_data = None
+    response = JSONResponse(content={
+        "msg": "Login exitoso",
+        "user": {
+            "datos_demograficos": demograficos_data,
+        },
+    })
     response.set_cookie(
         key="access_token_cookie",
         value=access_token,

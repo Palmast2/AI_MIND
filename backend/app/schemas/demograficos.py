@@ -1,5 +1,5 @@
-from typing import Optional, Literal
-from datetime import datetime
+from typing import Optional, Literal, List
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field, validator
 from uuid import UUID
 
@@ -108,7 +108,7 @@ class DemograficoBase(BaseModel):
     def validate_birth_year(cls, value):
         if value is None:
             return value
-        current_year = datetime.utcnow().year
+        current_year = datetime.now(timezone.utc).year
         if value > current_year:
             raise ValueError("birth_year no puede ser mayor al anio actual")
         return value
@@ -130,6 +130,22 @@ class DemograficoOut(DemograficoBase):
 
     class Config:
         orm_mode = True
+
+
+class CatalogOption(BaseModel):
+    id: int
+    label: str
+
+
+class DemograficoCatalogo(BaseModel):
+    preguntas: List[CatalogOption]
+    sexo: List[CatalogOption]
+    genero: List[CatalogOption]
+    nivel_educativo: List[CatalogOption]
+    ocupacion: List[CatalogOption]
+    estado_civil: List[CatalogOption]
+    situacion_laboral: List[CatalogOption]
+    estado: List[CatalogOption]
 
 
 PREGUNTAS_DEMOGRAFICOS = [
