@@ -5,6 +5,7 @@ import ChatScreen from './screens/ChatScreen';
 import LoginScreen from 'screens/LoginScreen';
 import RegisterScreen from 'screens/RegisterScreen';
 import SkinScreen from 'screens/SkinsScreen'
+import FormScreen from 'screens/FormScreen';
 import { StatusBar } from 'expo-status-bar';
 
 import './global.css';
@@ -20,6 +21,7 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Form" component={FormScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="Skins" component={SkinScreen} options={{ title: "Skins" }}/>
       </Stack.Navigator>

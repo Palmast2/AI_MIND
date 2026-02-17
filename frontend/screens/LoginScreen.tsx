@@ -12,8 +12,8 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { EyeClosed } from "../icons/EyeClosed";
-import { EyeOpen } from "../icons/EyeOpen";
+import { EyeClosed } from '../icons/EyeClosed';
+import { EyeOpen } from '../icons/EyeOpen';
 
 type LoginResult = { ok: true } | { ok: false; error: string };
 
@@ -22,8 +22,7 @@ const MAX_EMAIL_LEN = 128;
 const MAX_PASS_LEN = 128;
 
 // Email RFC 5322 lite (suficiente para app)
-const EMAIL_RX =
-  /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 
 // Patrones comunes de payloads SQLi (minificados)
 const SUSPICIOUS_PATTERNS: RegExp[] = [
@@ -33,10 +32,10 @@ const SUSPICIOUS_PATTERNS: RegExp[] = [
   /\bdelete\b\s+from\b/i,
   /\binsert\b\s+into\b/i,
   /\bupdate\b\s+\w+\s+\bset\b/i,
-  /--/,          // comentario línea
-  /\/\*|\*\//,   // comentario bloque
-  /;/,           // separador de sentencias
-  /['"`\\]/,     // comillas, backticks, backslash
+  /--/, // comentario línea
+  /\/\*|\*\//, // comentario bloque
+  /;/, // separador de sentencias
+  /['"`\\]/, // comillas, backticks, backslash
 ];
 
 // Normaliza para validar
@@ -52,7 +51,7 @@ function isValidEmail(email: string) {
 
 function hasSuspiciousPayload(s: string) {
   const low = s.toLowerCase();
-  return SUSPICIOUS_PATTERNS.some(rx => rx.test(low));
+  return SUSPICIOUS_PATTERNS.some((rx) => rx.test(low));
 }
 // ----------------------------------------------------
 
@@ -63,11 +62,9 @@ export default function LoginScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
 
   const onLogin = async () => {
-    // Normaliza entradas
     const emailN = normalizeInput(email);
     const passN = normalizeInput(password);
 
-    // Validaciones mínimas
     if (!emailN || !passN) {
       Alert.alert('Campos requeridos', 'Ingresa tu correo y contraseña.');
       return;
@@ -80,13 +77,8 @@ export default function LoginScreen({ navigation }: any) {
       Alert.alert('Contraseña demasiado larga', `Máximo ${MAX_PASS_LEN} caracteres.`);
       return;
     }
-
-    // Detección de patrones sospechosos
     if (hasSuspiciousPayload(emailN) || hasSuspiciousPayload(passN)) {
-      Alert.alert(
-        'Entrada no permitida',
-        'Se detectaron caracteres o patrones no permitidos.'
-      );
+      Alert.alert('Entrada no permitida', 'Se detectaron caracteres o patrones no permitidos.');
       return;
     }
 
@@ -95,8 +87,18 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(false);
 
     if (result.ok) {
-      // Por seguridad: no pases la contraseña a otras pantallas
       setPassword('');
+
+      // 👇 Validación extra: si datos_demograficos viene null => Form
+      console.log(result)
+      const datos = result.data?.user?.datos_demograficos; // usa el path real de tu respuesta
+      console.log(datos)
+
+      if (datos == null) {
+        navigation.navigate('Form'); // o navigation.reset(...) si quieres evitar volver a Login
+        return;
+      }
+
       navigation.navigate('Home', { initialMessage: emailN });
     } else {
       Alert.alert('Inicio de sesión', result.error);
@@ -106,7 +108,7 @@ export default function LoginScreen({ navigation }: any) {
   const saveCookies = async (cookiesObj: Record<string, string>) => {
     try {
       await AsyncStorage.setItem('cookies', JSON.stringify(cookiesObj));
-      console.log(cookiesObj)
+      console.log(cookiesObj);
       console.log('✅ Cookies guardadas');
     } catch (e) {
       console.error('Error al guardar cookies', e);
@@ -114,46 +116,47 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const loginApi = async (email: string, password: string): Promise<LoginResult> => {
+  try {
+    const response = await fetch('https://api.aimind.portablelab.work/api/v1/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include' as any,
+      body: JSON.stringify({ email, password }),
+    });
+
+    // intenta leer el json SIEMPRE (cuando exista)
+    let data: any = null;
     try {
-      const response = await fetch('https://api.aimind.portablelab.work/api/v1/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Puedes enviar un CSRF si tu backend lo usa para login también
-          // 'X-CSRF-TOKEN': token,
-        },
-        credentials: 'include' as any,
-        // Enviar como JSON (no concatenes en querystring)
-        body: JSON.stringify({ email, password }),
-      });
+      data = await response.json();
+    } catch (_) {}
 
-      if (response.status === 401) {
-        return { ok: false, error: 'Credenciales inválidas. Verifica tu correo y contraseña.' };
-      }
-      if (!response.ok) {
-        return { ok: false, error: `No se pudo iniciar sesión. Credenciales no válidas.` };
-      }
-
-      // Intenta extraer cookies si el backend las setea
-      const setCookie = response.headers.get('set-cookie');
-      if (setCookie) {
-        const cookiesObj: Record<string, string> = {};
-        setCookie
-          .split(/,(?=[^;]+=[^;]+)/g)
-          .forEach((cookieStr) => {
-            const [pair] = cookieStr.split(';');
-            const [name, value] = pair.split('=').map((s) => s.trim());
-            if (name) cookiesObj[name] = value ?? '';
-          });
-        await saveCookies(cookiesObj);
-      }
-
-      return { ok: true };
-    } catch (error) {
-      console.error(error);
-      return { ok: false, error: 'Hubo un problema de conexión. Intenta nuevamente.' };
+    if (response.status === 401) {
+      return { ok: false, error: 'Credenciales inválidas. Verifica tu correo y contraseña.' };
     }
-  };
+    if (!response.ok) {
+      return { ok: false, error: data?.msg || data?.message || 'No se pudo iniciar sesión.' };
+    }
+
+    // OJO: en React Native normalmente NO puedes leer "set-cookie"
+    // pero de todas formas mantengo tu lógica.
+    const setCookie = response.headers.get('set-cookie');
+    if (setCookie) {
+      const cookiesObj: Record<string, string> = {};
+      setCookie.split(/,(?=[^;]+=[^;]+)/g).forEach((cookieStr) => {
+        const [pair] = cookieStr.split(';');
+        const [name, value] = pair.split('=').map((s) => s.trim());
+        if (name) cookiesObj[name] = value ?? '';
+      });
+      await saveCookies(cookiesObj);
+    }
+
+    // ✅ aquí ya regresamos el JSON esperado
+    return { ok: true, data: data as LoginResponse };
+  } catch (error) {
+    console.error(error);
+    return { ok: false, error: 'Hubo un problema de conexión. Intenta nuevamente.' };
+  }
+};
 
   return (
     <SafeAreaView className="flex-1 bg-emerald-900">
@@ -193,7 +196,7 @@ export default function LoginScreen({ navigation }: any) {
                   secureTextEntry={!showPassword}
                   placeholder="Contraseña"
                   placeholderTextColor="rgba(255,255,255,0.7)"
-                  className="flex-1 py-4 px-2 text-white"
+                  className="flex-1 px-2 py-4 text-white"
                   editable={!loading}
                   maxLength={MAX_PASS_LEN}
                   textContentType="password"
@@ -203,10 +206,9 @@ export default function LoginScreen({ navigation }: any) {
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   accessibilityRole="button"
-                  accessibilityLabel={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  disabled={loading}
-                >
+                  disabled={loading}>
                   {showPassword ? (
                     <EyeOpen size={24} color="white" />
                   ) : (
