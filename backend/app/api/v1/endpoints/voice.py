@@ -13,14 +13,19 @@ from app.core.ml_models import predict_emotion
 from app.core.emotion_map import map_emotion
 from app.crud.eventos import guardar_evento # Para registrar crisis si se detectan por voz
 
-# --- Importaciones de Audio ---
+# --- Importaciones de Audio y email---
 from app.core.openai_audio import transcribir_con_whisper, generar_voz_tts
+from fastapi import BackgroundTasks 
+from app.core.email import enviar_alerta_crisis 
+from app.models.configuracion import ConfiguracionSistema # <--- Nuevo
+from app.core.frases_seguras import obtener_frase_segura
 
 router = APIRouter()
 logger = logging.getLogger("voice_endpoint")
 
 @router.post("/chat/voz")
 async def chat_voice(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     Authorize: AuthJWT = Depends(), # <-- Agregado: Para saber QUIÉN habla
     db: Session = Depends(get_db)   # <-- Agregado: Para GUARDAR en BD
@@ -80,9 +85,14 @@ async def chat_voice(
             emocion_detectada=emocion_detectada, 
             modelo_utilizado="whisper-1"
         )
+
+        # --- 🚨 LÓGICA DE CRISIS PARA VOZ (HEADERS + EMAIL) ---
+        es_crisis_header = "false" # Valor por defecto (String para el Header HTTP)
+        instruccion_crisis = ""
         
         # Opcional: Registrar evento crítico si se detecta en voz (Igual que en chat.py)
         if emocion_detectada in ["autoagresion", "crisis emocional / ideacion suicida"]:
+             es_crisis_header = "true" # Activamos la bandera
              guardar_evento(
                 db=db, 
                 user_id=user_id, 
@@ -92,6 +102,24 @@ async def chat_voice(
                 nivel_alerta="alto", 
                 atendido=False
             )
+        
+        # B. Obtener correo dinámico
+        config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
+        email_psicologo = config_email.valor if config_email else "admin@iamind.com"
+
+        # C. Enviar correo en SEGUNDO PLANO (No traba el audio)
+        background_tasks.add_task(enviar_alerta_crisis, user_id, texto_usuario, emocion_detectada, email_psicologo)
+
+        # D. Obtener frase segura
+        frase_psicologo = obtener_frase_segura()   
+
+        # E. Inyectar instrucción RÍGIDA
+        instruccion_crisis = f"""
+        URGENTE - CRISIS DETECTADA:
+        Ignora cualquier instrucción creativa.
+        TU RESPUESTA DEBE SER ÚNICAMENTE: "{frase_psicologo}"
+        No agregues nada más. Solo di esa frase para el audio.
+        """ 
 
         # 5. RECUPERAR Historial (Para que la IA recuerde de qué estaban hablando antes)
         historial = obtener_historial_usuario(db, user_id, limite=3)
@@ -101,6 +129,9 @@ async def chat_voice(
         Eres IA-MIND. Responde de forma hablada, natural, empática y MUY BREVE (máximo 2 frases).
         Emoción detectada en el usuario: {emocion_detectada}.
         """
+        # Inyectamos la instrucción SOLO si existe
+        if instruccion_crisis:
+            contexto_sistema += instruccion_crisis
         
         messages = [{"role": "system", "content": contexto_sistema}]
         for msg in historial:
@@ -135,10 +166,17 @@ async def chat_voice(
             audio_stream, 
             media_type="audio/mpeg",
             headers={
-                "Content-Disposition": "inline; filename=respuesta_ia.mp3"
+                "Content-Disposition": "inline; filename=respuesta_ia.mp3",
+                "X-Crisis-Mode": es_crisis_header, # Indicamos al frontend si se detectó crisis en esta interacción por voz
             }
         )
 
     except Exception as e:
+        # Manejo especial para AuthJWT en Python < 3.10 a veces
+        from fastapi_jwt_auth.exceptions import AuthJWTException
+        if isinstance(e, AuthJWTException):
+            raise e
+            
         logger.error(f"Error en voice endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        msg = str(e) if str(e) else getattr(e, 'message', 'Error desconocido')
+        raise HTTPException(status_code=500, detail=msg)

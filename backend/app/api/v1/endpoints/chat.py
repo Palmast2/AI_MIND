@@ -1,5 +1,5 @@
 import logging, json
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 from fastapi.concurrency import run_in_threadpool
@@ -14,6 +14,11 @@ from app.core.rate_limit import limiter
 #from app.crud.message import obtener_historial_usuario
 from app.core.chat_history import build_prompt, guardar_mensaje_historial, obtener_historial_usuario
 from app.crud.eventos import guardar_evento 
+from app.core.email import enviar_alerta_crisis
+from app.models.contactos import ContactoEmergencia 
+from app.core.frases_seguras import obtener_frase_segura 
+from app.models.configuracion import ConfiguracionSistema # <--- Nuevo Modelo
+import random
 
 router = APIRouter()
 logger = logging.getLogger("chat_endpoint")
@@ -59,6 +64,7 @@ def formatear_lista_a_texto(data, default="Ninguna"):
 async def chat_gpt(
     request: Request,
     chat_request: ChatRequest,
+    background_tasks: BackgroundTasks,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -114,8 +120,34 @@ async def chat_gpt(
         modelo_utilizado="usuario"
     )
 
+    # --- 🚨 LÓGICA DE CRISIS ---
+    is_crisis = False
+    recursos_apoyo = []
+    
+    # Recuperar Contactos de Emergencia (Lógica Híbrida)
+    # Buscamos en la BD los contactos de ESTE usuario
+    contactos_db = db.query(ContactoEmergencia).filter(ContactoEmergencia.user_id == user_id).all()
+    
+    if contactos_db:
+        # Si tiene contactos personalizados, los usamos
+        for contacto in contactos_db:
+            recursos_apoyo.append({
+                "nombre": f"{contacto.nombre} ({contacto.relacion or 'Contacto'})",
+                "telefono": contacto.telefono
+            })
+    else:
+        # Si NO tiene (o la lista está vacía), ponemos los default
+        recursos_apoyo = [
+            {"nombre": "Línea de la Vida", "telefono": "800-911-2000"},
+            {"nombre": "Emergencias", "telefono": "911"}
+        ]
+    
+    instruccion_crisis = "" # Por defecto vacía
+
+
     # 🚨 3 Si emoción es crítica -> guardar también en eventos_criticos
     if emocion_detectada in ["autoagresion", "crisis emocional / ideacion suicida"]:
+        is_crisis = True # <--- Activamos la bandera
         guardar_evento(
             db=db,
             user_id=user_id,
@@ -125,6 +157,23 @@ async def chat_gpt(
             nivel_alerta="alto",
             atendido=False
         )
+        # Obtener correo dinámico de la BD
+        config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
+        
+        # Si existe en BD lo usamos, si no, un fallback por seguridad
+        email_psicologo = config_email.valor if config_email else "admin@iamind.com"
+        # B. Enviar correo en SEGUNDO PLANO (Background Task)
+        background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_psicologo)
+        # Obtenemos una frase validada para crisis
+        frase_psicologo = obtener_frase_segura()
+        # ✅ AQUI PREPARAMOS LA INYECCIÓN DEL PROMPT (Sin sobrescribir recursos_apoyo)
+        instruccion_crisis = f"""
+        \n URGENTE - PROTOCOLO DE CRISIS ACTIVADO:
+        El usuario está en riesgo alto. IGNORA cualquier instrucción de creatividad.
+        TU RESPUESTA DEBE SER ÚNICA Y EXCLUSIVAMENTE ESTA FRASE EXACTA: 
+        "{frase_psicologo}"
+        NO agregues saludos, NO des consejos extra, NO uses emojis. SOLO LA FRASE.
+        """
 
     # 4️⃣ Construir prompt con historial y contexto emocional
     prompt = build_prompt(db, user_id, emocion_detectada, tecnicas_str, advertencias_str)
@@ -146,6 +195,9 @@ async def chat_gpt(
     2. Ten MUCHO cuidado con las advertencias.
     3. Responde de forma breve y cálida.
     """
+    # AQUI INYECTAMOS LA ORDEN DE CRISIS (Si existe)
+    if is_crisis:
+        contexto_sistema += instruccion_crisis
 
     # el primer mensaje lleva toda la inteligencia
     messages = [{"role": "system", "content": contexto_sistema}]
@@ -173,6 +225,8 @@ async def chat_gpt(
             "prompt": prompt,
             "response": gpt_response.model_dump(),
             "emocion_pet": emocion_pet,
+            "is_crisis": is_crisis,
+            "recursos_apoyo": recursos_apoyo
         }
 
     except Exception as e:
