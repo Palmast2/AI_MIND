@@ -17,8 +17,9 @@ from app.crud.eventos import guardar_evento
 from app.core.email import enviar_alerta_crisis
 from app.models.contactos import ContactoEmergencia 
 from app.core.frases_seguras import obtener_frase_segura 
-from app.models.configuracion import ConfiguracionSistema # <--- Nuevo Modelo
+from app.models.configuracion import ConfiguracionSistema 
 import random
+from app.models.user import User 
 
 router = APIRouter()
 logger = logging.getLogger("chat_endpoint")
@@ -87,6 +88,14 @@ async def chat_gpt(
     - emocion_pet (str): Emoción básica mapeada para la mascota virtual.
     - error (str, opcional): Mensaje de error si ocurre algún problema.
     
+    ---
+    🚨 **COMPORTAMIENTO DE CRISIS (Guía para el Frontend):** 🚨
+    Si la respuesta devuelve `"is_crisis": true`, el Frontend DEBE:
+    1. **Bloquear el input:** Deshabilitar la caja de texto para evitar que el usuario siga escribiendo.
+    2. **Mostrar Modal/Alerta:** Desplegar inmediatamente una ventana emergente o sección destacada (preferiblemente roja/naranja).
+    3. **Renderizar Contactos:** Iterar sobre el array `recursos_apoyo` y mostrar los nombres y teléfonos (ej. Línea de la Vida, o contactos personales) de forma que el usuario pueda llamar con un clic.
+    4. **Mostrar el mensaje seguro por psicologos:** Mostrar el texto que viene en `response.choices[0].message.content` como el último mensaje de la IA.
+    ---
     """
 
     # Verifica JWT y obtiene ID del usuario autenticado
@@ -157,16 +166,23 @@ async def chat_gpt(
             nivel_alerta="alto",
             atendido=False
         )
-        # Obtener correo dinámico de la BD
-        config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
+        # 1. Buscar al usuario actual
+        usuario_actual = db.query(User).filter(User.user_id == user_id).first()
         
-        # Si existe en BD lo usamos, si no, un fallback por seguridad
-        email_psicologo = config_email.valor if config_email else "admin@iamind.com"
-        # B. Enviar correo en SEGUNDO PLANO (Background Task)
-        background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_psicologo)
+        # 2. Buscar el correo global de respaldo
+        config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
+        email_global = config_email.valor if config_email else "iamind.app@gmail.com"
+        
+        # 3. Decidir: Si tiene doctor asignado lo usamos, si no, usamos el global
+        email_destino = usuario_actual.email_psicologo_asignado if (usuario_actual and usuario_actual.email_psicologo_asignado) else email_global
+
+        # B. Enviar correo en SEGUNDO PLANO (Usando el email_destino decidido)
+        background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_destino)
+        
         # Obtenemos una frase validada para crisis
         frase_psicologo = obtener_frase_segura()
-        # ✅ AQUI PREPARAMOS LA INYECCIÓN DEL PROMPT (Sin sobrescribir recursos_apoyo)
+
+        # PREPARAMOS LA INYECCIÓN DEL PROMPT (Sin sobrescribir recursos_apoyo)
         instruccion_crisis = f"""
         \n URGENTE - PROTOCOLO DE CRISIS ACTIVADO:
         El usuario está en riesgo alto. IGNORA cualquier instrucción de creatividad.

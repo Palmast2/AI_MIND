@@ -8,7 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 
 from fastapi_jwt_auth.exceptions import AuthJWTException, JWTDecodeError
 
-from app.api.v1.endpoints import analyze, auth, chat, reportes, emociones, voice, demograficos
+from app.api.v1.endpoints import analyze, auth, chat, reportes, emociones, voice, demograficos, perfil
 from app.core import config
 from app.core.rate_limit import limiter
 
@@ -95,4 +95,10 @@ app.include_router(
     demograficos.router,
     prefix="/api/v1",
     tags=["Demograficos"]
+)
+
+app.include_router(
+    perfil.router,
+    prefix="/api/v1/perfil",
+    tags=["Perfil y Emergencia"]
 )

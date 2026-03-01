@@ -17,8 +17,9 @@ from app.crud.eventos import guardar_evento # Para registrar crisis si se detect
 from app.core.openai_audio import transcribir_con_whisper, generar_voz_tts
 from fastapi import BackgroundTasks 
 from app.core.email import enviar_alerta_crisis 
-from app.models.configuracion import ConfiguracionSistema # <--- Nuevo
+from app.models.configuracion import ConfiguracionSistema
 from app.core.frases_seguras import obtener_frase_segura
+from app.models.user import User 
 
 router = APIRouter()
 logger = logging.getLogger("voice_endpoint")
@@ -46,13 +47,23 @@ async def chat_voice(
     - **Content-Type:** `multipart/form-data`
     - **Body:** `file`: Archivo de audio binario.
 
-    **Respuesta (Output):**
+    **Respuesta Exitosa (Output):**
     - **Content-Type:** `audio/mpeg`
     - **Body:** Flujo de bytes del archivo MP3 (Binary Stream).
-    
-    **Nota de Implementación Frontend:**
-    Este endpoint NO devuelve JSON. El cliente debe manejar la respuesta como un `Blob`
-    y crear una URL de objeto (`URL.createObjectURL`) para reproducirlo.
+    - **Headers:** Contiene el header personalizado `X-Crisis-Mode` ("true" o "false").
+
+    ---
+    🚨 **COMPORTAMIENTO DE CRISIS (Guía para el Frontend):** 🚨
+    A diferencia del chat de texto, este endpoint NO devuelve un JSON. 
+    El Frontend DEBE inspeccionar las cabeceras (Headers) de la respuesta HTTP:
+
+    1. Leer el header `X-Crisis-Mode`.
+    2. Si `X-Crisis-Mode` === "true", el Frontend DEBE:
+       - **Reproducir el audio:** El stream recibido YA CONTIENE a la IA dictando la frase segura.
+       - **Bloquear el micrófono:** Deshabilitar el botón de grabar para que el usuario no envíe más audios.
+       - **Mostrar Alerta Visual:** Desplegar un modal rojo/naranja en la pantalla.
+       - **Mostrar Contactos:** Como este endpoint no devuelve teléfonos en la respuesta, el Frontend debe consultar la lista de números del usuario desde otro endpoint (mas adelante se hara en otro sprint) o mostrar números por defecto (911).
+    ---
     """
     try:
         # 0. Autenticación (Necesaria para guardar en el historial del usuario correcto)
@@ -103,23 +114,25 @@ async def chat_voice(
                 atendido=False
             )
         
-        # B. Obtener correo dinámico
-        config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
-        email_psicologo = config_email.valor if config_email else "admin@iamind.com"
+             # Lógica de Jerarquía (Psicólogo)
+             usuario_actual = db.query(User).filter(User.user_id == user_id).first()
+             config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
+             email_global = config_email.valor if config_email else "iamind.app@gmail.com"
+             email_destino = usuario_actual.email_psicologo_asignado if (usuario_actual and usuario_actual.email_psicologo_asignado) else email_global
 
-        # C. Enviar correo en SEGUNDO PLANO (No traba el audio)
-        background_tasks.add_task(enviar_alerta_crisis, user_id, texto_usuario, emocion_detectada, email_psicologo)
+             # Enviar correo
+             background_tasks.add_task(enviar_alerta_crisis, user_id, texto_usuario, emocion_detectada, email_destino)
 
-        # D. Obtener frase segura
-        frase_psicologo = obtener_frase_segura()   
+             # Frase segura
+             frase_psicologo = obtener_frase_segura()        
 
-        # E. Inyectar instrucción RÍGIDA
-        instruccion_crisis = f"""
-        URGENTE - CRISIS DETECTADA:
-        Ignora cualquier instrucción creativa.
-        TU RESPUESTA DEBE SER ÚNICAMENTE: "{frase_psicologo}"
-        No agregues nada más. Solo di esa frase para el audio.
-        """ 
+             # Instrucción RÍGIDA
+             instruccion_crisis = f"""
+             URGENTE - CRISIS DETECTADA:
+             Ignora cualquier instrucción creativa.
+             TU RESPUESTA DEBE SER ÚNICAMENTE: "{frase_psicologo}"
+             No agregues nada más. Solo di esa frase para el audio.
+             """
 
         # 5. RECUPERAR Historial (Para que la IA recuerde de qué estaban hablando antes)
         historial = obtener_historial_usuario(db, user_id, limite=3)
