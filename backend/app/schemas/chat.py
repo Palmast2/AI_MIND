@@ -47,3 +47,7 @@ class ChatResponse(BaseModel):
     prompt: str
     response: GPTResponse
     emocion_pet: str
+    # Nuevos campos para Crisis:
+    is_crisis: bool = False
+    recursos_apoyo: Optional[List[Dict[str, str]]] = None
+    error: Optional[str] = None

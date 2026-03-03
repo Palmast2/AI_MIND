@@ -13,3 +13,4 @@ class User(Base):
     ultimo_login = Column(TIMESTAMP(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
     login_attempts = Column(Integer, default=0)
+    email_psicologo_asignado = Column(String(255), nullable=True)

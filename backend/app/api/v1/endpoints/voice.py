@@ -13,14 +13,20 @@ from app.core.ml_models import predict_emotion
 from app.core.emotion_map import map_emotion
 from app.crud.eventos import guardar_evento # Para registrar crisis si se detectan por voz
 
-# --- Importaciones de Audio ---
+# --- Importaciones de Audio y email---
 from app.core.openai_audio import transcribir_con_whisper, generar_voz_tts
+from fastapi import BackgroundTasks 
+from app.core.email import enviar_alerta_crisis 
+from app.models.configuracion import ConfiguracionSistema
+from app.core.frases_seguras import obtener_frase_segura
+from app.models.user import User 
 
 router = APIRouter()
 logger = logging.getLogger("voice_endpoint")
 
 @router.post("/chat/voz")
 async def chat_voice(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     Authorize: AuthJWT = Depends(), # <-- Agregado: Para saber QUIÉN habla
     db: Session = Depends(get_db)   # <-- Agregado: Para GUARDAR en BD
@@ -41,13 +47,23 @@ async def chat_voice(
     - **Content-Type:** `multipart/form-data`
     - **Body:** `file`: Archivo de audio binario.
 
-    **Respuesta (Output):**
+    **Respuesta Exitosa (Output):**
     - **Content-Type:** `audio/mpeg`
     - **Body:** Flujo de bytes del archivo MP3 (Binary Stream).
-    
-    **Nota de Implementación Frontend:**
-    Este endpoint NO devuelve JSON. El cliente debe manejar la respuesta como un `Blob`
-    y crear una URL de objeto (`URL.createObjectURL`) para reproducirlo.
+    - **Headers:** Contiene el header personalizado `X-Crisis-Mode` ("true" o "false").
+
+    ---
+    🚨 **COMPORTAMIENTO DE CRISIS (Guía para el Frontend):** 🚨
+    A diferencia del chat de texto, este endpoint NO devuelve un JSON. 
+    El Frontend DEBE inspeccionar las cabeceras (Headers) de la respuesta HTTP:
+
+    1. Leer el header `X-Crisis-Mode`.
+    2. Si `X-Crisis-Mode` === "true", el Frontend DEBE:
+       - **Reproducir el audio:** El stream recibido YA CONTIENE a la IA dictando la frase segura.
+       - **Bloquear el micrófono:** Deshabilitar el botón de grabar para que el usuario no envíe más audios.
+       - **Mostrar Alerta Visual:** Desplegar un modal rojo/naranja en la pantalla.
+       - **Mostrar Contactos:** Como este endpoint no devuelve teléfonos en la respuesta, el Frontend debe consultar la lista de números del usuario desde otro endpoint (mas adelante se hara en otro sprint) o mostrar números por defecto (911).
+    ---
     """
     try:
         # 0. Autenticación (Necesaria para guardar en el historial del usuario correcto)
@@ -80,9 +96,14 @@ async def chat_voice(
             emocion_detectada=emocion_detectada, 
             modelo_utilizado="whisper-1"
         )
+
+        # --- 🚨 LÓGICA DE CRISIS PARA VOZ (HEADERS + EMAIL) ---
+        es_crisis_header = "false" # Valor por defecto (String para el Header HTTP)
+        instruccion_crisis = ""
         
         # Opcional: Registrar evento crítico si se detecta en voz (Igual que en chat.py)
         if emocion_detectada in ["autoagresion", "crisis emocional / ideacion suicida"]:
+             es_crisis_header = "true" # Activamos la bandera
              guardar_evento(
                 db=db, 
                 user_id=user_id, 
@@ -92,6 +113,26 @@ async def chat_voice(
                 nivel_alerta="alto", 
                 atendido=False
             )
+        
+             # Lógica de Jerarquía (Psicólogo)
+             usuario_actual = db.query(User).filter(User.user_id == user_id).first()
+             config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
+             email_global = config_email.valor if config_email else "iamind.app@gmail.com"
+             email_destino = usuario_actual.email_psicologo_asignado if (usuario_actual and usuario_actual.email_psicologo_asignado) else email_global
+
+             # Enviar correo
+             background_tasks.add_task(enviar_alerta_crisis, user_id, texto_usuario, emocion_detectada, email_destino)
+
+             # Frase segura
+             frase_psicologo = obtener_frase_segura()        
+
+             # Instrucción RÍGIDA
+             instruccion_crisis = f"""
+             URGENTE - CRISIS DETECTADA:
+             Ignora cualquier instrucción creativa.
+             TU RESPUESTA DEBE SER ÚNICAMENTE: "{frase_psicologo}"
+             No agregues nada más. Solo di esa frase para el audio.
+             """
 
         # 5. RECUPERAR Historial (Para que la IA recuerde de qué estaban hablando antes)
         historial = obtener_historial_usuario(db, user_id, limite=3)
@@ -101,6 +142,9 @@ async def chat_voice(
         Eres IA-MIND. Responde de forma hablada, natural, empática y MUY BREVE (máximo 2 frases).
         Emoción detectada en el usuario: {emocion_detectada}.
         """
+        # Inyectamos la instrucción SOLO si existe
+        if instruccion_crisis:
+            contexto_sistema += instruccion_crisis
         
         messages = [{"role": "system", "content": contexto_sistema}]
         for msg in historial:
@@ -135,10 +179,17 @@ async def chat_voice(
             audio_stream, 
             media_type="audio/mpeg",
             headers={
-                "Content-Disposition": "inline; filename=respuesta_ia.mp3"
+                "Content-Disposition": "inline; filename=respuesta_ia.mp3",
+                "X-Crisis-Mode": es_crisis_header, # Indicamos al frontend si se detectó crisis en esta interacción por voz
             }
         )
 
     except Exception as e:
+        # Manejo especial para AuthJWT en Python < 3.10 a veces
+        from fastapi_jwt_auth.exceptions import AuthJWTException
+        if isinstance(e, AuthJWTException):
+            raise e
+            
         logger.error(f"Error en voice endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        msg = str(e) if str(e) else getattr(e, 'message', 'Error desconocido')
+        raise HTTPException(status_code=500, detail=msg)
