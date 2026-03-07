@@ -20,6 +20,7 @@ from app.core.frases_seguras import obtener_frase_segura
 from app.models.configuracion import ConfiguracionSistema 
 import random
 from app.models.user import User 
+from app.core.risk_detector import evaluar_riesgo
 
 router = APIRouter()
 logger = logging.getLogger("chat_endpoint")
@@ -89,12 +90,17 @@ async def chat_gpt(
     - error (str, opcional): Mensaje de error si ocurre algún problema.
     
     ---
-    🚨 **COMPORTAMIENTO DE CRISIS (Guía para el Frontend):** 🚨
-    Si la respuesta devuelve `"is_crisis": true`, el Frontend DEBE:
+    🧠 **SISTEMA MULTINIVEL (Nuevo):**
+    El sistema evalúa automáticamente el mensaje en 3 niveles de riesgo (Bajo, Medio, Alto).
+    Si se detecta **cualquier** nivel de riesgo, se enviará un correo de alerta en segundo plano al psicólogo asignado al paciente (o al global), sin interrumpir la experiencia del usuario.
+
+    🚨 **COMPORTAMIENTO DE CRISIS EXTREMA (Guía para el Frontend):** 🚨
+    **SOLO** si el nivel de riesgo es **ALTO**, la respuesta devolverá `"is_crisis": true`.
+    En ese caso, el Frontend DEBE:
     1. **Bloquear el input:** Deshabilitar la caja de texto para evitar que el usuario siga escribiendo.
     2. **Mostrar Modal/Alerta:** Desplegar inmediatamente una ventana emergente o sección destacada (preferiblemente roja/naranja).
-    3. **Renderizar Contactos:** Iterar sobre el array `recursos_apoyo` y mostrar los nombres y teléfonos (ej. Línea de la Vida, o contactos personales) de forma que el usuario pueda llamar con un clic.
-    4. **Mostrar el mensaje seguro por psicologos:** Mostrar el texto que viene en `response.choices[0].message.content` como el último mensaje de la IA.
+    3. **Renderizar Contactos:** Iterar sobre el array `recursos_apoyo` y mostrar los nombres y teléfonos para que el usuario pueda llamar con un clic.
+    4. **Mostrar el mensaje de seguridad:** Mostrar el texto que viene en `response.choices[0].message.content` (frase de contención inyectada).
     ---
     """
 
@@ -106,7 +112,7 @@ async def chat_gpt(
     user_message = chat_request.user_message
     emotion_result = await run_in_threadpool(predict_emotion, user_message)
 
-    emocion_detectada = map_emotion(emotion_result, user_message=user_message)
+    emocion_detectada = map_emotion(emotion_result, user_message=user_message, db=db)
 
     emocion_detectada_pet = get_basic_emotion(emotion_result)
 
@@ -152,44 +158,39 @@ async def chat_gpt(
         ]
     
     instruccion_crisis = "" # Por defecto vacía
+    nivel_riesgo = evaluar_riesgo(user_message, db=db)
 
-
-    # 🚨 3 Si emoción es crítica -> guardar también en eventos_criticos
-    if emocion_detectada in ["autoagresion", "crisis emocional / ideacion suicida"]:
-        is_crisis = True # <--- Activamos la bandera
+    if nivel_riesgo: 
         guardar_evento(
-            db=db,
-            user_id=user_id,
-            message_id=message_id,
-            tipo_evento=emocion_detectada,
-            descripcion=user_message,
-            nivel_alerta="alto",
-            atendido=False
+            db=db, user_id=user_id, message_id=message_id, tipo_evento=emocion_detectada,
+            descripcion=user_message, nivel_alerta=nivel_riesgo, atendido=False
         )
-        # 1. Buscar al usuario actual
+
         usuario_actual = db.query(User).filter(User.user_id == user_id).first()
-        
-        # 2. Buscar el correo global de respaldo
         config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
-        email_global = config_email.valor if config_email else "iamind.app@gmail.com"
         
-        # 3. Decidir: Si tiene doctor asignado lo usamos, si no, usamos el global
-        email_destino = usuario_actual.email_psicologo_asignado if (usuario_actual and usuario_actual.email_psicologo_asignado) else email_global
+        email_paciente = usuario_actual.email_psicologo_asignado if usuario_actual else None
+        if email_paciente and email_paciente.strip().lower() in ["null", "none", ""]: 
+            email_paciente = None
+            
+        email_global = config_email.valor if config_email else None
+        if email_global and email_global.strip().lower() in ["null", "none", ""]: 
+            email_global = "iamind.app@gmail.com"
+            
+        email_destino = email_paciente if email_paciente else (email_global or "iamind.app@gmail.com")
 
-        # B. Enviar correo en SEGUNDO PLANO (Usando el email_destino decidido)
-        background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_destino)
+        background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_destino, nivel_riesgo)
         
-        # Obtenemos una frase validada para crisis
-        frase_psicologo = obtener_frase_segura()
-
-        # PREPARAMOS LA INYECCIÓN DEL PROMPT (Sin sobrescribir recursos_apoyo)
-        instruccion_crisis = f"""
-        \n URGENTE - PROTOCOLO DE CRISIS ACTIVADO:
-        El usuario está en riesgo alto. IGNORA cualquier instrucción de creatividad.
-        TU RESPUESTA DEBE SER ÚNICA Y EXCLUSIVAMENTE ESTA FRASE EXACTA: 
-        "{frase_psicologo}"
-        NO agregues saludos, NO des consejos extra, NO uses emojis. SOLO LA FRASE.
-        """
+        if nivel_riesgo == "alto":
+            is_crisis = True 
+            frase_psicologo = obtener_frase_segura()
+            instruccion_crisis = f"""
+            \n URGENTE - PROTOCOLO DE CRISIS ACTIVADO:
+            El usuario está en riesgo alto. IGNORA cualquier instrucción de creatividad.
+            TU RESPUESTA DEBE SER ÚNICA Y EXCLUSIVAMENTE ESTA FRASE EXACTA: 
+            "{frase_psicologo}"
+            NO agregues saludos, NO des consejos extra, NO uses emojis. SOLO LA FRASE.
+            """
 
     # 4️⃣ Construir prompt con historial y contexto emocional
     prompt = build_prompt(db, user_id, emocion_detectada, tecnicas_str, advertencias_str)

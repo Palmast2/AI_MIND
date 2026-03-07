@@ -1,4 +1,4 @@
-from .risk_detector import detectar_crisis
+from .risk_detector import evaluar_riesgo
 
 EMOTION_MAP = {
     "anger": "enojo",
@@ -35,12 +35,11 @@ EXTENDED_MAP = {
 POSITIVE_KEYWORDS = ["bien", "feliz", "genial", "contento", "alegre", "maravilloso"]
 NEGATIVE_KEYWORDS = ["mal", "triste", "desesperado", "harto", "deprimido",]
 
-def map_emotion(emotion_result, user_message=None):
-    from .emotion_map import EMOTION_MAP, EXTENDED_MAP
-
-    # 0. Detectar crisis primero
-    if user_message and detectar_crisis(user_message):
-        return "crisis emocional / ideacion suicida"
+def map_emotion(emotion_result, user_message=None, db=None):
+    if user_message and db:
+        riesgo = evaluar_riesgo(user_message, db)
+        if riesgo == "alto":
+            return "crisis emocional / ideacion suicida"
 
     all_emotions = emotion_result.get("all_emotions", [])
     # Filtrar 'otros' / 'others'

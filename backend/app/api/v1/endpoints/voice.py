@@ -19,7 +19,8 @@ from fastapi import BackgroundTasks
 from app.core.email import enviar_alerta_crisis 
 from app.models.configuracion import ConfiguracionSistema
 from app.core.frases_seguras import obtener_frase_segura
-from app.models.user import User 
+from app.models.user import User
+from app.core.risk_detector import evaluar_riesgo 
 
 router = APIRouter()
 logger = logging.getLogger("voice_endpoint")
@@ -53,16 +54,19 @@ async def chat_voice(
     - **Headers:** Contiene el header personalizado `X-Crisis-Mode` ("true" o "false").
 
     ---
-    🚨 **COMPORTAMIENTO DE CRISIS (Guía para el Frontend):** 🚨
+    **SISTEMA MULTINIVEL:**
+    El sistema evalúa el riesgo del audio transcrito (Bajo, Medio, Alto) y notifica al psicólogo correspondiente por correo en segundo plano.
+
+    🚨 **COMPORTAMIENTO DE CRISIS EXTREMA (Guía para el Frontend):** 🚨
     A diferencia del chat de texto, este endpoint NO devuelve un JSON. 
     El Frontend DEBE inspeccionar las cabeceras (Headers) de la respuesta HTTP:
 
     1. Leer el header `X-Crisis-Mode`.
-    2. Si `X-Crisis-Mode` === "true", el Frontend DEBE:
-       - **Reproducir el audio:** El stream recibido YA CONTIENE a la IA dictando la frase segura.
+    2. **SOLO** si `X-Crisis-Mode` === "true" (Riesgo Alto), el Frontend DEBE:
+       - **Reproducir el audio:** El stream recibido YA CONTIENE a la IA dictando la frase de contención clínica segura.
        - **Bloquear el micrófono:** Deshabilitar el botón de grabar para que el usuario no envíe más audios.
-       - **Mostrar Alerta Visual:** Desplegar un modal rojo/naranja en la pantalla.
-       - **Mostrar Contactos:** Como este endpoint no devuelve teléfonos en la respuesta, el Frontend debe consultar la lista de números del usuario desde otro endpoint (mas adelante se hara en otro sprint) o mostrar números por defecto (911).
+       - **Mostrar Alerta Visual:** Desplegar un modal de emergencia en la pantalla.
+       - **Mostrar Contactos:** Consultar la lista de números del usuario (desde el endpoint de contactos) o mostrar números por defecto (911).
     ---
     """
     try:
@@ -84,7 +88,7 @@ async def chat_voice(
 
         # 3. Detectar Emoción (Para mantener coherencia con la BD y registrar eventos)
         emotion_result = predict_emotion(texto_usuario)
-        emocion_detectada = map_emotion(emotion_result, user_message=texto_usuario)
+        emocion_detectada = map_emotion(emotion_result, user_message=texto_usuario, db=db)
 
         # 4. GUARDAR mensaje del usuario en BD
         # Esto permite que si luego vas al chat de texto, veas lo que dijiste por voz.
@@ -100,40 +104,50 @@ async def chat_voice(
         # --- 🚨 LÓGICA DE CRISIS PARA VOZ (HEADERS + EMAIL) ---
         es_crisis_header = "false" # Valor por defecto (String para el Header HTTP)
         instruccion_crisis = ""
+
+        # Evaluar en qué nivel de riesgo estamos
+        nivel_riesgo = evaluar_riesgo(texto_usuario, db=db)
         
-        # Opcional: Registrar evento crítico si se detecta en voz (Igual que en chat.py)
-        if emocion_detectada in ["autoagresion", "crisis emocional / ideacion suicida"]:
-             es_crisis_header = "true" # Activamos la bandera
+        if nivel_riesgo:
+             # 1. Guardar evento crítico en BD (con su respectivo nivel)
              guardar_evento(
                 db=db, 
                 user_id=user_id, 
                 message_id=message_id, 
                 tipo_evento=emocion_detectada, 
                 descripcion=texto_usuario, 
-                nivel_alerta="alto", 
+                nivel_alerta=nivel_riesgo, 
                 atendido=False
-            )
+             )
         
-             # Lógica de Jerarquía (Psicólogo)
+             # 2. Lógica de Jerarquía de Correos (A prueba de errores "null")
              usuario_actual = db.query(User).filter(User.user_id == user_id).first()
              config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
-             email_global = config_email.valor if config_email else "iamind.app@gmail.com"
-             email_destino = usuario_actual.email_psicologo_asignado if (usuario_actual and usuario_actual.email_psicologo_asignado) else email_global
+             
+             email_paciente = usuario_actual.email_psicologo_asignado if usuario_actual else None
+             if email_paciente and email_paciente.strip().lower() in ["null", "none", ""]:
+                 email_paciente = None
+                 
+             email_global = config_email.valor if config_email else None
+             if email_global and email_global.strip().lower() in ["null", "none", ""]:
+                 email_global = "iamind.app@gmail.com"
+                 
+             email_destino = email_paciente if email_paciente else (email_global or "iamind.app@gmail.com")
 
-             # Enviar correo
-             background_tasks.add_task(enviar_alerta_crisis, user_id, texto_usuario, emocion_detectada, email_destino)
+             # 3. Mandar correo al psicólogo (Para los 3 niveles)
+             background_tasks.add_task(enviar_alerta_crisis, user_id, texto_usuario, emocion_detectada, email_destino, nivel_riesgo)
 
-             # Frase segura
-             frase_psicologo = obtener_frase_segura()        
-
-             # Instrucción RÍGIDA
-             instruccion_crisis = f"""
-             URGENTE - CRISIS DETECTADA:
-             Ignora cualquier instrucción creativa.
-             TU RESPUESTA DEBE SER ÚNICAMENTE: "{frase_psicologo}"
-             No agregues nada más. Solo di esa frase para el audio.
-             """
-
+             # 4. Acciones exclusivas si el riesgo es ALTO
+             if nivel_riesgo == "alto":
+                 es_crisis_header = "true" # Indicamos al Frontend que bloquee
+                 frase_psicologo = obtener_frase_segura()        
+                 instruccion_crisis = f"""
+                 URGENTE - CRISIS DETECTADA:
+                 Ignora cualquier instrucción creativa.
+                 TU RESPUESTA DEBE SER ÚNICAMENTE: "{frase_psicologo}"
+                 No agregues nada más. Solo di esa frase para el audio.
+                 """
+                 
         # 5. RECUPERAR Historial (Para que la IA recuerde de qué estaban hablando antes)
         historial = obtener_historial_usuario(db, user_id, limite=3)
         
