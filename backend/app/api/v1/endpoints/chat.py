@@ -187,7 +187,7 @@ async def chat_gpt(
         
         if nivel_riesgo == "alto":
             is_crisis = True
-            frase_psicologo = obtener_frase_segura(db)
+            frase_psicologo = obtener_frase_segura(db, nivel_riesgo)
             
 
     try:

@@ -140,7 +140,7 @@ async def chat_voice(
              # 4. Acciones exclusivas si el riesgo es ALTO
              if nivel_riesgo == "alto":
                  es_crisis_header = "true" # Indicamos al Frontend que bloquee
-                 frase_psicologo = obtener_frase_segura(db)
+                 frase_psicologo = obtener_frase_segura(db, nivel_riesgo)
 
         # Si es crisis alta, evitamos la llamada a GPT y usamos la frase validada
         if es_crisis_header == "true":
