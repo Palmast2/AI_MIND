@@ -2,7 +2,9 @@ import os
 import aiosmtplib
 from email.message import EmailMessage
 
-async def enviar_alerta_crisis(user_id: str, mensaje_usuario: str, emocion: str, destinatario_email: str):    
+from app.crud import message
+
+async def enviar_alerta_crisis(user_id: str, mensaje_usuario: str, emocion: str, destinatario_email: str, nivel_riesgo: str):    
     """
     Envía un correo urgente usando aiosmtplib directo (sin fastapi-mail).
     Evita conflictos de dependencias con Starlette/Pydantic.
@@ -22,15 +24,11 @@ async def enviar_alerta_crisis(user_id: str, mensaje_usuario: str, emocion: str,
         print("⚠️ Error: Faltan credenciales en el .env para enviar correos.")
         return
 
-    if not mail_to:
-        print("⚠️ Error: No hay un correo de psicólogo configurado en la BD.")
-        return
-
     # 2. Construir el mensaje
     message = EmailMessage()
     message["From"] = mail_from
     message["To"] = mail_to
-    message["Subject"] = f"🚨 ALERTA CRISIS - Usuario {user_id}"
+    message["Subject"] = f"🚨 ALERTA DE RIESGO {nivel_riesgo.upper()} - Usuario {user_id}"
 
     # 3. Contenido HTML
     html_content = f"""
@@ -49,11 +47,11 @@ async def enviar_alerta_crisis(user_id: str, mensaje_usuario: str, emocion: str,
     <body>
         <div class="container">
             <div class="header">
-                <h1>⚠️ ALERTA DE CRISIS: IA-MIND</h1>
+                <h1>⚠️ ALERTA DE RIESGO: {nivel_riesgo.upper()}</h1>
             </div>
             <div class="content">
                 <p>Estimado Profesional,</p>
-                <p>El sistema ha detectado un patrón de <strong>{emocion}</strong>.</p>
+                <p>El sistema IA-MIND ha detectado un patrón de riesgo <strong>{nivel_riesgo.upper()}</strong> asociado a la emoción: <strong>{emocion}</strong>.</p>
                 
                 <div class="alert-box">
                     <p><strong>Usuario ID:</strong> {user_id}</p>
@@ -71,7 +69,7 @@ async def enviar_alerta_crisis(user_id: str, mensaje_usuario: str, emocion: str,
     </html>
     """
 
-    message.set_content("Alerta de crisis detectada. Habilite HTML para ver detalles.")
+    message.set_content(f"Alerta de riesgo {nivel_riesgo.upper()} detectada. Habilite HTML para ver detalles.")
     message.add_alternative(html_content, subtype='html')
 
     # 4. Enviar usando conexión segura (STARTTLS para Gmail)
@@ -84,6 +82,6 @@ async def enviar_alerta_crisis(user_id: str, mensaje_usuario: str, emocion: str,
             password=smtp_password,
             start_tls=True # Importante para puerto 587
         )
-        print(f"✅ Correo de alerta enviado a {mail_to}")
+        print(f"✅ Correo de alerta {nivel_riesgo.upper()} enviado a {mail_to}")
     except Exception as e:
         print(f"❌ Error enviando correo de alerta: {str(e)}")
