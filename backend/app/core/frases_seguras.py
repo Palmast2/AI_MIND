@@ -1,13 +1,15 @@
-import random
+from typing import Optional
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
-# Lista validada (simulada por ahora)
-FRASES_CONTENCION = [
-    "Entiendo que estás pasando por un momento muy difícil. Respira profundo, estoy aquí contigo.",
-    "Tu dolor es válido, pero no tienes que enfrentarlo solo. Vamos a buscar apoyo.",
-    "Sé que ahora todo parece oscuro, pero este momento pasará. Por favor, mantente a salvo.",
-    "Eres importante. Por favor, lee los contactos que te muestro abajo, hay gente que quiere ayudarte."
-]
+from app.models.frases_seguras import FraseSegura
 
-def obtener_frase_segura():
-    """Devuelve una frase aleatoria validada para crisis."""
-    return random.choice(FRASES_CONTENCION)
+def obtener_frase_segura(db: Session) -> Optional[str]:
+    """Devuelve una frase aleatoria validada para crisis desde BD."""
+    frase = (
+        db.query(FraseSegura)
+        .filter(FraseSegura.activa.is_(True))
+        .order_by(func.random())
+        .first()
+    )
+    return frase.frase if frase else None

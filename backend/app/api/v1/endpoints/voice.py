@@ -103,7 +103,7 @@ async def chat_voice(
 
         # --- 🚨 LÓGICA DE CRISIS PARA VOZ (HEADERS + EMAIL) ---
         es_crisis_header = "false" # Valor por defecto (String para el Header HTTP)
-        instruccion_crisis = ""
+        frase_psicologo = None
 
         # Evaluar en qué nivel de riesgo estamos
         nivel_riesgo = evaluar_riesgo(texto_usuario, db=db)
@@ -140,34 +140,29 @@ async def chat_voice(
              # 4. Acciones exclusivas si el riesgo es ALTO
              if nivel_riesgo == "alto":
                  es_crisis_header = "true" # Indicamos al Frontend que bloquee
-                 frase_psicologo = obtener_frase_segura()        
-                 instruccion_crisis = f"""
-                 URGENTE - CRISIS DETECTADA:
-                 Ignora cualquier instrucción creativa.
-                 TU RESPUESTA DEBE SER ÚNICAMENTE: "{frase_psicologo}"
-                 No agregues nada más. Solo di esa frase para el audio.
-                 """
+                 frase_psicologo = obtener_frase_segura(db)
+
+        # Si es crisis alta, evitamos la llamada a GPT y usamos la frase validada
+        if es_crisis_header == "true":
+            texto_ia = frase_psicologo or "Para asegurar tu bienestar y que recibas una atención más especializada…"
+        else:
+            # 5. RECUPERAR Historial (Para que la IA recuerde de qué estaban hablando antes)
+            historial = obtener_historial_usuario(db, user_id, limite=3)
+            
+            # Contexto simplificado para voz (Instrucción de brevedad para el TTS)
+            contexto_sistema = f"""
+            Eres IA-MIND. Responde de forma hablada, natural, empática y MUY BREVE (máximo 2 frases).
+            Emoción detectada en el usuario: {emocion_detectada}.
+            """
+
+            messages = [{"role": "system", "content": contexto_sistema}]
+            for msg in historial:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+
+            # 6. PENSAR (GPT-4o) con contexto del historial
+            respuesta_full = await get_chat_response(messages)
+            texto_ia = respuesta_full.choices[0].message.content
                  
-        # 5. RECUPERAR Historial (Para que la IA recuerde de qué estaban hablando antes)
-        historial = obtener_historial_usuario(db, user_id, limite=3)
-        
-        # Contexto simplificado para voz (Instrucción de brevedad para el TTS)
-        contexto_sistema = f"""
-        Eres IA-MIND. Responde de forma hablada, natural, empática y MUY BREVE (máximo 2 frases).
-        Emoción detectada en el usuario: {emocion_detectada}.
-        """
-        # Inyectamos la instrucción SOLO si existe
-        if instruccion_crisis:
-            contexto_sistema += instruccion_crisis
-        
-        messages = [{"role": "system", "content": contexto_sistema}]
-        for msg in historial:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-
-        # 6. PENSAR (GPT-4o) con contexto del historial
-        respuesta_full = await get_chat_response(messages)
-        texto_ia = respuesta_full.choices[0].message.content
-
         # 7. GUARDAR respuesta de IA en BD
         guardar_mensaje_historial(
             db=db, 

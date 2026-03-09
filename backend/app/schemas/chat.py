@@ -44,10 +44,11 @@ class GPTResponse(BaseModel):
     system_fingerprint: str
 
 class ChatResponse(BaseModel):
-    prompt: str
-    response: GPTResponse
+    prompt: Optional[str] = None
+    response: Optional[GPTResponse] = None
     emocion_pet: str
     # Nuevos campos para Crisis:
     is_crisis: bool = False
     recursos_apoyo: Optional[List[Dict[str, str]]] = None
+    frase_validada: Optional[str] = None
     error: Optional[str] = None

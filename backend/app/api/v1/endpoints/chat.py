@@ -87,6 +87,9 @@ async def chat_gpt(
     - prompt (str): Prompt generado para el modelo.
     - response (dict): Respuesta generada por el modelo.
     - emocion_pet (str): Emoción básica mapeada para la mascota virtual.
+    - is_crisis (bool): Indica si se detectó una crisis de riesgo alto.
+    - recursos_apoyo (list): Lista de contactos de apoyo si se detecta crisis.
+    - frase_validada (str): Frase de contención validada para crisis.
     - error (str, opcional): Mensaje de error si ocurre algún problema.
     
     ---
@@ -100,7 +103,7 @@ async def chat_gpt(
     1. **Bloquear el input:** Deshabilitar la caja de texto para evitar que el usuario siga escribiendo.
     2. **Mostrar Modal/Alerta:** Desplegar inmediatamente una ventana emergente o sección destacada (preferiblemente roja/naranja).
     3. **Renderizar Contactos:** Iterar sobre el array `recursos_apoyo` y mostrar los nombres y teléfonos para que el usuario pueda llamar con un clic.
-    4. **Mostrar el mensaje de seguridad:** Mostrar el texto que viene en `response.choices[0].message.content` (frase de contención inyectada).
+    4. **Mostrar el mensaje de seguridad:** Mostrar el texto que viene en `frase_validada`.
     ---
     """
 
@@ -137,6 +140,7 @@ async def chat_gpt(
 
     # --- 🚨 LÓGICA DE CRISIS ---
     is_crisis = False
+    frase_psicologo = None
     recursos_apoyo = []
     
     # Recuperar Contactos de Emergencia (Lógica Híbrida)
@@ -182,51 +186,40 @@ async def chat_gpt(
         background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_destino, nivel_riesgo)
         
         if nivel_riesgo == "alto":
-            is_crisis = True 
-            frase_psicologo = obtener_frase_segura()
-            instruccion_crisis = f"""
-            \n URGENTE - PROTOCOLO DE CRISIS ACTIVADO:
-            El usuario está en riesgo alto. IGNORA cualquier instrucción de creatividad.
-            TU RESPUESTA DEBE SER ÚNICA Y EXCLUSIVAMENTE ESTA FRASE EXACTA: 
-            "{frase_psicologo}"
-            NO agregues saludos, NO des consejos extra, NO uses emojis. SOLO LA FRASE.
-            """
-
-    # 4️⃣ Construir prompt con historial y contexto emocional
-    prompt = build_prompt(db, user_id, emocion_detectada, tecnicas_str, advertencias_str)
-    # 5️⃣ Obtener historial completo desde DB para enviar al modelo
-    historial = obtener_historial_usuario(db, user_id, limite=3)
-
-    # 6️⃣ Preparar mensajes para el modelo
-    # Creamos un contexto rico para que la IA sepa qué hacer
-    contexto_sistema = f"""
-    Eres IA-MIND, un asistente psicológico profesional y empático.
-    
-    CONTEXTO DEL USUARIO ACTUAL:
-    - Emoción detectada: {emocion_detectada}
-    - Advertencias clínicas: {advertencias_str}
-    - Técnicas recomendadas: {tecnicas_str}
-
-    INSTRUCCIONES:
-    1. Usa las técnicas recomendadas si aplica.
-    2. Ten MUCHO cuidado con las advertencias.
-    3. Responde de forma breve y cálida.
-    """
-    # AQUI INYECTAMOS LA ORDEN DE CRISIS (Si existe)
-    if is_crisis:
-        contexto_sistema += instruccion_crisis
-
-    # el primer mensaje lleva toda la inteligencia
-    messages = [{"role": "system", "content": contexto_sistema}]
-    
-    # Agregamos el historial (que ya trae el mensaje del usuario al final)
-    for msg in historial:
-        messages.append({"role": msg["role"], "content": msg["content"]})
+            is_crisis = True
+            frase_psicologo = obtener_frase_segura(db)
+            
 
     try:
-        # 7️⃣ Llamar a GPT
-        gpt_response = await get_chat_response(messages)
-        assistant_content = gpt_response.choices[0].message.content
+        # 4️⃣ Construir prompt y mensajes solo si NO es crisis alta
+        if is_crisis:
+            prompt = None
+            gpt_response = None
+            assistant_content = frase_psicologo or ""
+        else:
+            prompt = build_prompt(db, user_id, emocion_detectada, tecnicas_str, advertencias_str)
+            historial = obtener_historial_usuario(db, user_id, limite=3)
+
+            contexto_sistema = f"""
+            Eres IA-MIND, un asistente psicológico profesional y empático.
+            
+            CONTEXTO DEL USUARIO ACTUAL:
+            - Emoción detectada: {emocion_detectada}
+            - Advertencias clínicas: {advertencias_str}
+            - Técnicas recomendadas: {tecnicas_str}
+
+            INSTRUCCIONES:
+            1. Usa las técnicas recomendadas si aplica.
+            2. Ten MUCHO cuidado con las advertencias.
+            3. Responde de forma breve y cálida.
+            """
+            messages = [{"role": "system", "content": contexto_sistema}]
+
+            for msg in historial:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+
+            gpt_response = await get_chat_response(messages)
+            assistant_content = gpt_response.choices[0].message.content
 
         # 8️⃣ Guardar respuesta de la IA en DB
         guardar_mensaje_historial(
@@ -240,10 +233,11 @@ async def chat_gpt(
 
         return {
             "prompt": prompt,
-            "response": gpt_response.model_dump(),
+            "response": gpt_response.model_dump() if gpt_response else None,
             "emocion_pet": emocion_pet,
             "is_crisis": is_crisis,
-            "recursos_apoyo": recursos_apoyo
+            "recursos_apoyo": recursos_apoyo,
+            "frase_validada": frase_psicologo if is_crisis else None
         }
 
     except Exception as e:
