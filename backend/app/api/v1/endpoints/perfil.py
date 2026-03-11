@@ -231,7 +231,7 @@ def actualizar_email_global(
     # 'rol' o 'is_admin' a tu tabla de usuarios. 
     # Por ahora, podemos protegerlo validando que SOLO un id pueda hacerlo:
     # ---------------------------------------------------------
-    correo_super_admin = "b815a74c-4b3c-4d8a-b38e-fe89584cfc83" # ID
+    correo_super_admin = "59f1060b-269a-4965-a8d8-8b6fc5fc9adc" # ID
     
     if str(usuario.user_id) != correo_super_admin:
         raise HTTPException(
