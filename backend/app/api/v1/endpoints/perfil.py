@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Literal
 from fastapi_jwt_auth import AuthJWT
 
 # Importaciones de tu proyecto
@@ -22,7 +22,7 @@ class PsicologoUpdate(BaseModel):
 class ContactoCreate(BaseModel):
     nombre: str
     telefono: str
-    relacion: Optional[str] = "Familiar/Amigo"
+    relacion: Optional[Literal["Familiar", "Amigo", "Pareja", "Terapeuta", "Otro"]] = "Familiar"
 
 class ContactoResponse(ContactoCreate):
     id: int
@@ -105,13 +105,14 @@ def agregar_contacto(
         **📥 Request Body (JSON):**
         - `nombre` (string, requerido): Nombre del contacto (Ej. "María").
         - `telefono` (string, requerido): Número de teléfono (Ej. "5512345678").
-        - `relacion` (string, opcional): Parentesco o relación (Ej. "Madre"). Por defecto es "Familiar/Amigo".
+        - `relacion` (string, opcional): Vínculo con el usuario. **DEBE ser exactamente uno de estos valores:** `"Familiar"`, `"Amigo"`, `"Pareja"`, `"Terapeuta"`, `"Otro"`. Por defecto es `"Familiar"`.
 
         **📤 Respuesta Exitosa (200 OK):**
         Devuelve el objeto completo del contacto recién creado, incluyendo su nuevo `id`.
 
         **❌ Posibles Errores:**
         - `401 Unauthorized`: Token faltante o expirado.
+        - `422 Unprocessable Entity`: Se envió una `relacion` no válida (ej. "novio" en vez de "Pareja") o faltan campos obligatorios.
         """
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
