@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS contactos_emergencia (
         REFERENCES usuarios(user_id)
         ON DELETE CASCADE
 );
-
+ALTER TABLE contactos_emergencia ADD COLUMN alias VARCHAR(50);
 
 -- 1. Crear la tabla de configuraciones
 CREATE TABLE configuracion_sistema (

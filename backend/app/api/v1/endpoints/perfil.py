@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import List, Optional, Literal
 from fastapi_jwt_auth import AuthJWT
 
 # Importaciones de tu proyecto
@@ -21,8 +21,9 @@ class PsicologoUpdate(BaseModel):
 
 class ContactoCreate(BaseModel):
     nombre: str
-    telefono: str
-    relacion: Optional[str] = "Familiar/Amigo"
+    telefono: str = Field(..., regex=r"^[0-9]{10}$", description="Debe ser un número de 10 dígitos")
+    alias: Optional[str] = None
+    relacion: Optional[Literal["Familiar", "Amigo", "Pareja", "Terapeuta", "Otro"]] = "Familiar"
 
 class ContactoResponse(ContactoCreate):
     id: int
@@ -32,6 +33,10 @@ class ContactoResponse(ContactoCreate):
 
 class EmailGlobalUpdate(BaseModel):
     email_global: EmailStr
+
+class RelacionCat(BaseModel):
+    id: int
+    relacion: str
 
 # ==========================================
 # 2. ENDPOINTS DE PSICÓLOGO
@@ -105,13 +110,14 @@ def agregar_contacto(
         **📥 Request Body (JSON):**
         - `nombre` (string, requerido): Nombre del contacto (Ej. "María").
         - `telefono` (string, requerido): Número de teléfono (Ej. "5512345678").
-        - `relacion` (string, opcional): Parentesco o relación (Ej. "Madre"). Por defecto es "Familiar/Amigo".
+        - `relacion` (string, opcional): Vínculo con el usuario. **DEBE ser exactamente uno de estos valores:** `"Familiar"`, `"Amigo"`, `"Pareja"`, `"Terapeuta"`, `"Otro"`. Por defecto es `"Familiar"`.
 
         **📤 Respuesta Exitosa (200 OK):**
         Devuelve el objeto completo del contacto recién creado, incluyendo su nuevo `id`.
 
         **❌ Posibles Errores:**
         - `401 Unauthorized`: Token faltante o expirado.
+        - `422 Unprocessable Entity`: Se envió una `relacion` no válida (ej. "novio" en vez de "Pareja") o faltan campos obligatorios.
         """
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
@@ -120,6 +126,7 @@ def agregar_contacto(
         user_id=user_id,
         nombre=contacto.nombre,
         telefono=contacto.telefono,
+        alias=contacto.alias,
         relacion=contacto.relacion
     )
     
@@ -231,7 +238,7 @@ def actualizar_email_global(
     # 'rol' o 'is_admin' a tu tabla de usuarios. 
     # Por ahora, podemos protegerlo validando que SOLO un id pueda hacerlo:
     # ---------------------------------------------------------
-    correo_super_admin = "b815a74c-4b3c-4d8a-b38e-fe89584cfc83" # ID
+    correo_super_admin = "59f1060b-269a-4965-a8d8-8b6fc5fc9adc" # ID
     
     if str(usuario.user_id) != correo_super_admin:
         raise HTTPException(
@@ -257,3 +264,21 @@ def actualizar_email_global(
         "mensaje": "Correo global de respaldo actualizado correctamente", 
         "nuevo_email_global": config_email.valor
     }
+
+# ==========================================
+# 5. ENDPOINTS DE RELACIONES/CONTACTOS
+# ==========================================
+@router.get("/contactos/relaciones", response_model=List[RelacionCat])
+def obtener_tipos_relacion():
+    """
+    ### Obtener Catálogo de Relaciones
+    Devuelve la lista de opciones permitidas para el campo 'relacion' en los contactos.
+    Formato en array de objetos (id y etiqueta) para estandarizar con el Frontend.
+    """
+    return [
+        {"id": 1, "relacion": "Familiar"},
+        {"id": 2, "relacion": "Amigo"},
+        {"id": 3, "relacion": "Pareja"},
+        {"id": 4, "relacion": "Terapeuta"},
+        {"id": 5, "relacion": "Otro"}
+    ]
