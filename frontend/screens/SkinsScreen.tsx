@@ -23,8 +23,7 @@ import {
   isRemoteValue,
 } from "./skins";
 
-export default function SkinsScreen() {
-  const navigation = useNavigation();
+export default function SkinsScreen({ navigation }: any) {
 
   // Lista base (todas las locales)
   const baseItems: SkinItem[] = useMemo(
@@ -88,7 +87,7 @@ export default function SkinsScreen() {
       } else {
         await AsyncStorage.setItem(STORAGE_KEY, selected.key as string);
       }
-      navigation.goBack();
+      navigation.navigate("Home");
     } catch (e) {
       Alert.alert("Error", "No se pudo guardar la skin.");
     }

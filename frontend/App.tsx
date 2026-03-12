@@ -6,6 +6,9 @@ import LoginScreen from 'screens/LoginScreen';
 import RegisterScreen from 'screens/RegisterScreen';
 import SkinScreen from 'screens/SkinsScreen'
 import FormScreen from 'screens/FormScreen';
+import OptionsScreen from 'screens/OptionScreen';
+import InfoContacto from 'screens/screensOptions/screensContactoEmergencia/InfoContacto'
+import MenuContactoEmergencia from 'screens/screensOptions/screensContactoEmergencia/MenuContactoEmergencia';
 import { StatusBar } from 'expo-status-bar';
 
 import './global.css';
@@ -24,6 +27,13 @@ export default function App() {
         <Stack.Screen name="Form" component={FormScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="Skins" component={SkinScreen} options={{ title: "Skins" }}/>
+        <Stack.Screen name="Options" component={OptionsScreen} options={{title: "Ajustes"}}/>
+        {/*SCREANS DE OPCIONES*/}
+
+        {/*SCREANS CONTACTO DE EMERGENCIA*/}
+        <Stack.Screen name="OptionsMenuContactoEmergencia" component={MenuContactoEmergencia} options={{title: "Contactos de Emergencia"}}/>
+        <Stack.Screen name="OptionsInfoContacto" component={InfoContacto} options={{title: "Informacion de Contacto"}}/>
+
       </Stack.Navigator>
       <StatusBar style="auto" />
     </NavigationContainer>

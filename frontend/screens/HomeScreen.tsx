@@ -33,6 +33,7 @@ import { DeleteIcon } from 'icons/Delete';
 import { PauseIcon } from 'icons/Pause';
 import { PlayIcon } from 'icons/Play';
 import { SendIcon } from 'icons/Enviar';
+import { GearIcon } from 'icons/Gear';
 
 function getCurrentYearMonth() {
   const now = new Date();
@@ -442,16 +443,16 @@ export default function HomeScreen({ navigation }: any) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <View className="flex flex-row">
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Skins')}
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
-            <Text style={{ color: '#fff', fontWeight: '600' }}>Skins</Text>
-          </TouchableOpacity>
+        <View className="flex flex-row justify-center align-middle">
           <TouchableOpacity
             onPress={handleInformePress}
             style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
             <Text style={{ color: '#fff', fontWeight: '600' }}>Informe</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Options')}
+            style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+            <GearIcon size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       ),
