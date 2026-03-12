@@ -12,3 +12,4 @@ class ContactoEmergencia(Base):
     nombre = Column(String, nullable=False)
     telefono = Column(String, nullable=False)
     relacion = Column(String, nullable=True)
+    alias = Column(String(50), nullable=True)

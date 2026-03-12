@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional, Literal
 from fastapi_jwt_auth import AuthJWT
 
@@ -21,7 +21,8 @@ class PsicologoUpdate(BaseModel):
 
 class ContactoCreate(BaseModel):
     nombre: str
-    telefono: str
+    telefono: str = Field(..., regex=r"^[0-9]{10}$", description="Debe ser un número de 10 dígitos")
+    alias: Optional[str] = None
     relacion: Optional[Literal["Familiar", "Amigo", "Pareja", "Terapeuta", "Otro"]] = "Familiar"
 
 class ContactoResponse(ContactoCreate):
@@ -32,6 +33,10 @@ class ContactoResponse(ContactoCreate):
 
 class EmailGlobalUpdate(BaseModel):
     email_global: EmailStr
+
+class RelacionCat(BaseModel):
+    id: int
+    relacion: str
 
 # ==========================================
 # 2. ENDPOINTS DE PSICÓLOGO
@@ -121,6 +126,7 @@ def agregar_contacto(
         user_id=user_id,
         nombre=contacto.nombre,
         telefono=contacto.telefono,
+        alias=contacto.alias,
         relacion=contacto.relacion
     )
     
@@ -258,3 +264,21 @@ def actualizar_email_global(
         "mensaje": "Correo global de respaldo actualizado correctamente", 
         "nuevo_email_global": config_email.valor
     }
+
+# ==========================================
+# 5. ENDPOINTS DE RELACIONES/CONTACTOS
+# ==========================================
+@router.get("/contactos/relaciones", response_model=List[RelacionCat])
+def obtener_tipos_relacion():
+    """
+    ### Obtener Catálogo de Relaciones
+    Devuelve la lista de opciones permitidas para el campo 'relacion' en los contactos.
+    Formato en array de objetos (id y etiqueta) para estandarizar con el Frontend.
+    """
+    return [
+        {"id": 1, "relacion": "Familiar"},
+        {"id": 2, "relacion": "Amigo"},
+        {"id": 3, "relacion": "Pareja"},
+        {"id": 4, "relacion": "Terapeuta"},
+        {"id": 5, "relacion": "Otro"}
+    ]
