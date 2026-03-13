@@ -9,6 +9,9 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SendIcon } from "icons/Enviar"; // ajusta la ruta si es necesario
+import { UserIcon } from "icons/UserIcons/User";
+import { CreateUserIcon } from "icons/UserIcons/CreateUser";
+import { HealthUser } from "icons/UserIcons/HealthUser";
 
 export default function MenuContactoEmergencia({ navigation }: any) {
   return (
@@ -20,14 +23,31 @@ export default function MenuContactoEmergencia({ navigation }: any) {
         >
           <View className="flex-1 px-6 pt-6">
 
-            {/* Botón 1 */}
+            {/* Dar Alta Psicologo */}
             <TouchableOpacity
               className="w-full border border-white rounded-xl px-4 py-4 flex-row items-center justify-between mb-4"
               onPress={() => navigation.navigate("OptionsInfoContacto")}
             >
-              <Text className="text-white text-lg font-semibold">
+              <View className="flex-row">
+              <HealthUser/>
+              <Text className="text-white pl-2 text-lg font-semibold">
+                Añadir Psicologo
+              </Text>
+              </View>
+              <SendIcon />
+            </TouchableOpacity>
+
+            {/* Crear Contactos */}
+            <TouchableOpacity
+              className="w-full border border-white rounded-xl px-4 py-4 flex-row items-center justify-between mb-4"
+              onPress={() => navigation.navigate("OptionsInfoContacto")}
+            >
+              <View className="flex-row">
+              <CreateUserIcon/>
+              <Text className="text-white pl-2 text-lg font-semibold">
                 Crear Contacto
               </Text>
+              </View>
               <SendIcon />
             </TouchableOpacity>
 
