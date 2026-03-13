@@ -19,6 +19,9 @@ class PsicologoUpdate(BaseModel):
     # Permite que sea un correo válido o nulo (por si quiere quitarlo)
     email_psicologo: Optional[EmailStr] = None
 
+class PsicologoCreate(BaseModel):
+    email_psicologo: EmailStr
+
 class ContactoCreate(BaseModel):
     nombre: str
     telefono: str = Field(..., regex=r"^[0-9]{10}$", description="Debe ser un número de 10 dígitos")
@@ -41,6 +44,54 @@ class RelacionCat(BaseModel):
 # ==========================================
 # 2. ENDPOINTS DE PSICÓLOGO
 # ==========================================
+
+@router.post("/psicologo")
+def asignar_psicologo(
+    datos: PsicologoCreate,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Asignar Psicólogo
+        Asigna un correo de psicólogo al usuario si aún no tiene uno.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
+
+        **📥 Request Body (JSON):**
+        - `email_psicologo` (string, requerido): Un correo electrónico válido.
+
+        **📤 Respuesta Exitosa (200 OK):**
+        ```json
+        {
+            "mensaje": "Correo de psicólogo asignado correctamente",
+            "email_asignado": "doctor@clinica.com"
+        }
+        ```
+
+        **❌ Posibles Errores:**
+        - `401 Unauthorized`: Token faltante o expirado.
+        - `404 Not Found`: El usuario no existe en la base de datos.
+        - `409 Conflict`: Ya existe un psicólogo asignado.
+        - `422 Unprocessable Entity`: El correo enviado no tiene un formato válido.
+        """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    usuario = db.query(User).filter(User.user_id == user_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if usuario.email_psicologo_asignado:
+        raise HTTPException(status_code=409, detail="Ya existe un psicólogo asignado")
+
+    usuario.email_psicologo_asignado = datos.email_psicologo
+    db.commit()
+
+    return {
+        "mensaje": "Correo de psicólogo asignado correctamente",
+        "email_asignado": usuario.email_psicologo_asignado
+    }
 
 @router.put("/psicologo")
 def actualizar_psicologo(
