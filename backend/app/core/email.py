@@ -80,7 +80,8 @@ async def enviar_alerta_crisis(user_id: str, mensaje_usuario: str, emocion: str,
             port=smtp_port,
             username=smtp_user,
             password=smtp_password,
-            start_tls=True # Importante para puerto 587
+            start_tls=True, # Importante para puerto 587
+            timeout=20
         )
         print(f"✅ Correo de alerta {nivel_riesgo.upper()} enviado a {mail_to}")
     except Exception as e:

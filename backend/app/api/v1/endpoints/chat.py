@@ -162,7 +162,7 @@ async def chat_gpt(
         ]
     
     instruccion_crisis = "" # Por defecto vacía
-    nivel_riesgo = evaluar_riesgo(user_message, db=db)
+    nivel_riesgo = evaluar_riesgo(user_message, db=db, emotion_result=emotion_result)
 
     if nivel_riesgo: 
         guardar_evento(

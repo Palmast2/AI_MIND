@@ -106,7 +106,7 @@ async def chat_voice(
         frase_psicologo = None
 
         # Evaluar en qué nivel de riesgo estamos
-        nivel_riesgo = evaluar_riesgo(texto_usuario, db=db)
+        nivel_riesgo = evaluar_riesgo(texto_usuario, db=db, emotion_result=emotion_result)
         
         if nivel_riesgo:
              # 1. Guardar evento crítico en BD (con su respectivo nivel)

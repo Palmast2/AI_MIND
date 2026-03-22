@@ -26,7 +26,7 @@ class ContactoCreate(BaseModel):
     nombre: str
     telefono: str = Field(..., regex=r"^[0-9]{10}$", description="Debe ser un número de 10 dígitos")
     alias: Optional[str] = None
-    relacion: Optional[Literal["Familiar", "Amigo", "Pareja", "Terapeuta", "Otro"]] = "Familiar"
+    relacion: Optional[Literal["Familiar", "Amigo", "Pareja", "Otro"]] = "Familiar"
 
 class ContactoResponse(ContactoCreate):
     id: int
@@ -330,6 +330,5 @@ def obtener_tipos_relacion():
         {"id": 1, "relacion": "Familiar"},
         {"id": 2, "relacion": "Amigo"},
         {"id": 3, "relacion": "Pareja"},
-        {"id": 4, "relacion": "Terapeuta"},
-        {"id": 5, "relacion": "Otro"}
+        {"id": 4, "relacion": "Otro"}
     ]
