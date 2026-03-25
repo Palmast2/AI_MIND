@@ -28,6 +28,12 @@ class ContactoCreate(BaseModel):
     alias: Optional[str] = None
     relacion: Optional[Literal["Familiar", "Amigo", "Pareja", "Otro"]] = "Familiar"
 
+class ContactoUpdate(BaseModel):
+    nombre: Optional[str] = None
+    telefono: Optional[str] = Field(None, regex=r"^[0-9]{10}$", description="Debe ser un número de 10 dígitos")
+    alias: Optional[str] = None
+    relacion: Optional[Literal["Familiar", "Amigo", "Pareja", "Otro"]] = None
+
 class ContactoResponse(ContactoCreate):
     id: int
     class Config:
@@ -211,6 +217,55 @@ def listar_contactos(
 
     contactos = db.query(ContactoEmergencia).filter(ContactoEmergencia.user_id == user_id).all()
     return contactos
+
+
+@router.put("/contactos/{contacto_id}", response_model=ContactoResponse)
+def actualizar_contacto(
+    contacto_id: int,
+    contacto: ContactoUpdate,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Actualizar Contacto de Emergencia
+        Actualiza un contacto específico de la red de apoyo del usuario.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
+
+        **📥 Path Parameter:**
+        - `contacto_id` (integer, requerido): El ID único del contacto a actualizar.
+
+        **📥 Request Body (JSON):**
+        - Campos opcionales: `nombre`, `telefono`, `alias`, `relacion`.
+
+        **📤 Respuesta Exitosa (200 OK):**
+        Devuelve el objeto completo del contacto actualizado.
+
+        **❌ Posibles Errores:**
+        - `401 Unauthorized`: Token faltante o expirado.
+        - `404 Not Found`: El contacto no existe o no pertenece al usuario autenticado.
+        - `422 Unprocessable Entity`: Datos con formato invalido.
+        """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    contacto_db = db.query(ContactoEmergencia).filter(
+        ContactoEmergencia.id == contacto_id,
+        ContactoEmergencia.user_id == user_id
+    ).first()
+
+    if not contacto_db:
+        raise HTTPException(status_code=404, detail="Contacto no encontrado")
+
+    datos = contacto.dict(exclude_unset=True)
+    for campo, valor in datos.items():
+        setattr(contacto_db, campo, valor)
+
+    db.commit()
+    db.refresh(contacto_db)
+
+    return contacto_db
 
 
 @router.delete("/contactos/{contacto_id}")
