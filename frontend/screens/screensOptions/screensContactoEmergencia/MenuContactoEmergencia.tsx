@@ -51,6 +51,20 @@ export default function MenuContactoEmergencia({ navigation }: any) {
               <SendIcon />
             </TouchableOpacity>
 
+            {/* Lista de Contactos */}
+            <TouchableOpacity
+              className="w-full border border-white rounded-xl px-4 py-4 flex-row items-center justify-between mb-4"
+              onPress={() => navigation.navigate("OptionsListaContacto")}
+            >
+              <View className="flex-row">
+              <CreateUserIcon/>
+              <Text className="text-white pl-2 text-lg font-semibold">
+                Lista de Contacto
+              </Text>
+              </View>
+              <SendIcon />
+            </TouchableOpacity>
+
           </View>
         </KeyboardAwareScrollView>
       </TouchableWithoutFeedback>

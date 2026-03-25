@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Image,
   findNodeHandle,
+  Alert,
   Platform,
   TouchableOpacity,
   Keyboard,
@@ -296,19 +297,21 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   }, []);
 
-  const callEmergencyContact = useCallback(async (phone: string) => {
-    try {
-      const cleanPhone = String(phone).replace(/[^\d+]/g, '');
-      const url = `tel:${cleanPhone}`;
-      const supported = await Linking.canOpenURL(url);
+  const callEmergencyContact = async (phone: string | number) => {
+  try {
+    const cleanPhone = String(phone ?? '').replace(/[^\d+]/g, '');
 
-      if (supported) {
-        await Linking.openURL(url);
-      }
-    } catch (error) {
-      console.error('callEmergencyContact error:', error);
+    if (!cleanPhone) {
+      Alert.alert('Error', 'No se encontró un número válido.');
+      return;
     }
-  }, []);
+
+    await Linking.openURL(`tel:${cleanPhone}`);
+  } catch (error) {
+    console.error('callEmergencyContact error:', error);
+    Alert.alert('Error', 'No se pudo abrir la llamada.');
+  }
+};
 
   const goToContactsScreen = useCallback(() => {
     setCrisisModalVisible(false);

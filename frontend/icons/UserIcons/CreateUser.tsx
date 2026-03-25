@@ -9,7 +9,7 @@ export function CreateUserIcon({ size = 24, color = 'white' }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke={color}
-      stroke-width="2"
+      stroke-width="3"
       stroke-linecap="round"
       stroke-linejoin="round"
       className="icon icon-tabler icons-tabler-outline icon-tabler-user-plus">
