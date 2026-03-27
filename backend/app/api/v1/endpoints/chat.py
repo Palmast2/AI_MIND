@@ -142,6 +142,9 @@ async def chat_gpt(
     is_crisis = False
     frase_psicologo = None
     recursos_apoyo = []
+
+    # 1. Agregamos SIEMPRE el número nacional de México por defecto
+    recursos_apoyo.append({"nombre": "Línea de la Vida Nacional", "telefono": "800-911-2000"})
     
     # Recuperar Contactos de Emergencia (Lógica Híbrida)
     # Buscamos en la BD los contactos de ESTE usuario
@@ -154,12 +157,6 @@ async def chat_gpt(
                 "nombre": f"{contacto.nombre} ({contacto.relacion or 'Contacto'})",
                 "telefono": contacto.telefono
             })
-    else:
-        # Si NO tiene (o la lista está vacía), ponemos los default
-        recursos_apoyo = [
-            {"nombre": "Línea de la Vida", "telefono": "800-911-2000"},
-            {"nombre": "Emergencias", "telefono": "911"}
-        ]
     
     instruccion_crisis = "" # Por defecto vacía
     nivel_riesgo = evaluar_riesgo(user_message, db=db, emotion_result=emotion_result)

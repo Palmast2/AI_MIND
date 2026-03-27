@@ -145,6 +145,85 @@ def actualizar_psicologo(
         "email_asignado": usuario.email_psicologo_asignado
     }
 
+@router.get("/psicologo")
+def obtener_psicologo(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Obtener Psicólogo Asignado
+        Devuelve el correo del psicólogo actual del usuario. Si no tiene ninguno asignado, devolverá `null`.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` (No requiere CSRF por ser petición GET).
+
+        **📤 Respuesta Exitosa (200 OK):**
+        ```json
+        {
+            "email_asignado": "doctor@clinica.com"
+        }
+        ```
+        *(Nota: Si no tiene psicólogo, el valor de `email_asignado` será `null`)*
+
+        **❌ Posibles Errores:**
+        - `401 Unauthorized`: Token faltante o expirado.
+        - `404 Not Found`: El usuario no existe en la base de datos.
+        """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    usuario = db.query(User).filter(User.user_id == user_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    return {
+        "email_asignado": usuario.email_psicologo_asignado
+    }
+
+
+@router.delete("/psicologo")
+def eliminar_psicologo(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Eliminar Psicólogo Asignado
+        Desvincula al psicólogo del usuario actual, dejando el registro vacío. 
+        A partir de este momento, las alertas de crisis se enviarán al correo global de emergencia.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
+
+        **📤 Respuesta Exitosa (200 OK):**
+        ```json
+        {
+            "mensaje": "Psicólogo desvinculado exitosamente",
+            "email_asignado": null
+        }
+        ```
+
+        **❌ Posibles Errores:**
+        - `400 Bad Request`: El usuario no tiene un psicólogo asignado actualmente (ya estaba vacío).
+        - `401 Unauthorized`: Token faltante o expirado.
+        - `404 Not Found`: El usuario no existe en la base de datos.
+        """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    usuario = db.query(User).filter(User.user_id == user_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if not usuario.email_psicologo_asignado:
+        raise HTTPException(status_code=400, detail="El usuario no tiene un psicólogo asignado actualmente")
+
+    usuario.email_psicologo_asignado = None
+    db.commit()
+    
+    return {
+        "mensaje": "Psicólogo desvinculado exitosamente",
+        "email_asignado": None
+    }
 
 # ==========================================
 # 3. ENDPOINTS DE CONTACTOS DE EMERGENCIA
@@ -200,14 +279,20 @@ def listar_contactos(
     db: Session = Depends(get_db)
 ):
     """
-        ### Obtener Red de Apoyo (Contactos)
-        Devuelve la lista completa de contactos de emergencia registrados por el usuario.
+        ### Obtener Red de Apoyo (Contactos Personales + Sistema)
+        Devuelve la lista de contactos de emergencia registrados por el usuario, 
+        e inyecta automáticamente la línea de ayuda nacional por defecto al final de la lista.
 
         **🔒 Requiere Autenticación:**
         - Cookie `access_token_cookie` (No requiere CSRF por ser petición GET).
 
         **📤 Respuesta Exitosa (200 OK):**
-        Una lista (Array) de objetos de contactos. Si no tiene contactos, devuelve un Array vacío `[]`.
+        Una lista (Array) de objetos de contactos. 
+        *(Nota: Aunque el usuario no tenga contactos propios registrados, el array siempre devolverá al menos los contactos fijos del sistema).*
+
+        **⚠️ NOTA IMPORTANTE PARA FRONTEND:**
+        Los contactos de sistema (ej. Línea de la Vida) siempre tendrán un **`id` negativo (ej. `-1`)**. 
+        El Frontend DEBE evaluar si `id < 0` para ocultar o deshabilitar los botones de "Editar" y "Eliminar" en la interfaz.
 
         **❌ Posibles Errores:**
         - `401 Unauthorized`: Token faltante o expirado.
@@ -216,8 +301,25 @@ def listar_contactos(
     user_id = Authorize.get_jwt_subject()
 
     contactos = db.query(ContactoEmergencia).filter(ContactoEmergencia.user_id == user_id).all()
-    return contactos
-
+    # 2. Convertimos los objetos de BD a diccionarios
+    lista_final = []
+    for c in contactos:
+        lista_final.append({
+            "id": c.id,
+            "nombre": c.nombre,
+            "telefono": c.telefono,
+            "alias": c.alias,
+            "relacion": c.relacion
+        })
+    # 3. Inyectamos los contactos de sistema (con IDs negativos para diferenciarlos)
+    lista_final.append({
+        "id": -1,
+        "nombre": "Línea de la Vida (Nacional)",
+        "telefono": "8009112000",
+        "alias": "Ayuda Psicológica",
+        "relacion": "Otro"
+    })
+    return lista_final
 
 @router.put("/contactos/{contacto_id}", response_model=ContactoResponse)
 def actualizar_contacto(
