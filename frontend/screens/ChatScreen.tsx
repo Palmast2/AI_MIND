@@ -316,7 +316,7 @@ export default function ChatScreen({ route, navigation }: any) {
   const goToContactsScreen = useCallback(() => {
     setCrisisModalVisible(false);
     setRememberModalVisible(false);
-    navigation?.navigate?.('Contactos');
+    navigation?.navigate?.('ListaContactosEmergencia');
   }, [navigation]);
 
   const openCrisisFlow = useCallback(async () => {

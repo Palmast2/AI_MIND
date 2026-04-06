@@ -26,7 +26,7 @@ export default function MenuContactoEmergencia({ navigation }: any) {
             {/* Dar Alta Psicologo */}
             <TouchableOpacity
               className="w-full border border-white rounded-xl px-4 py-4 flex-row items-center justify-between mb-4"
-              onPress={() => navigation.navigate("OptionsInfoContacto")}
+              onPress={() => navigation.navigate("OptionsInfoPsicologo")}
             >
               <View className="flex-row">
               <HealthUser/>
@@ -57,7 +57,7 @@ export default function MenuContactoEmergencia({ navigation }: any) {
               onPress={() => navigation.navigate("OptionsListaContacto")}
             >
               <View className="flex-row">
-              <CreateUserIcon/>
+              <UserIcon/>
               <Text className="text-white pl-2 text-lg font-semibold">
                 Lista de Contacto
               </Text>

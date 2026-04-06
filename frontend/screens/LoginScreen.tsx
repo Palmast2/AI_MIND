@@ -205,6 +205,7 @@ export default function LoginScreen({ navigation }: any) {
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
+                  accessible={true}
                   accessibilityRole="button"
                   accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -232,11 +233,19 @@ export default function LoginScreen({ navigation }: any) {
             {/* Link a registro */}
             <View className="mb-6 mt-auto items-center">
               <View className="flex-row items-center">
-                <Text className="text-base text-white/80">¿No estás registrado?</Text>
+                <Text className="text-xl text-white/80">¿No estás registrado?</Text>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('Register')}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Text className="ml-2 text-base font-bold text-white underline">Regístrate</Text>
+                  <Text className="ml-2 text-xl font-bold text-white underline">Regístrate</Text>
+                </TouchableOpacity>
+              </View>
+              <View className="flex-row items-center">
+                <Text className="text-sm text-white/80">Le nuestro</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('AvisoPrivacidad')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text className="ml-2 text-sm font-bold text-white underline ">Aviso de Privacidad</Text>
                 </TouchableOpacity>
               </View>
             </View>
