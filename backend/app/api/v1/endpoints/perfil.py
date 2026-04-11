@@ -9,19 +9,32 @@ from app.database import get_db
 from app.models.user import User
 from app.models.contactos import ContactoEmergencia
 from app.models.configuracion import ConfiguracionSistema
+from app.models.psicologos import PsicologoUsuario # Importa tu nuevo modelo
+from app.models.corrientes import CorrienteFilosofica # Importa el modelo de corrientes
 router = APIRouter()
 
 # ==========================================
 # 1. ESQUEMAS DE VALIDACIÓN (Pydantic)
 # ==========================================
 
-class PsicologoUpdate(BaseModel):
-    # Permite que sea un correo válido o nulo (por si quiere quitarlo)
-    email_psicologo: Optional[EmailStr] = None
-
+# --- Esquemas Psicólogos ---
 class PsicologoCreate(BaseModel):
-    email_psicologo: EmailStr
+    nombre: Optional[str] = None
+    alias: str = Field(..., description="Alias para identificarlo rápido (ej. 'Doc Principal')")
+    email: EmailStr
 
+class PsicologoUpdate(BaseModel):
+    nombre: Optional[str] = None
+    alias: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+class PsicologoResponse(PsicologoCreate):
+    id: int
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
+# --- Esquemas Contactos ---
 class ContactoCreate(BaseModel):
     nombre: str
     telefono: str = Field(..., regex=r"^[0-9]{10}$", description="Debe ser un número de 10 dígitos")
@@ -40,6 +53,7 @@ class ContactoResponse(ContactoCreate):
             orm_mode = True        
             from_attributes = True  
 
+# --- Esquemas Configuración y Relaciones ---
 class EmailGlobalUpdate(BaseModel):
     email_global: EmailStr
 
@@ -47,183 +61,188 @@ class RelacionCat(BaseModel):
     id: int
     relacion: str
 
+# --- Esquemas Corrientes Filosóficas ---
+class CorrienteCreate(BaseModel):
+    nombre: str
+
+class CorrienteResponse(CorrienteCreate):
+    id: int
+    class Config:
+        orm_mode = True
+        from_attributes = True
 # ==========================================
 # 2. ENDPOINTS DE PSICÓLOGO
 # ==========================================
 
-@router.post("/psicologo")
-def asignar_psicologo(
+@router.post("/psicologos", response_model=PsicologoResponse)
+def agregar_psicologo(
     datos: PsicologoCreate,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     """
-        ### Asignar Psicólogo
-        Asigna un correo de psicólogo al usuario si aún no tiene uno.
+        ### Agregar Psicólogo
+        Añade un nuevo psicólogo a la red del usuario. Permite tener múltiples terapeutas registrados.
 
         **🔒 Requiere Autenticación:**
         - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
 
         **📥 Request Body (JSON):**
-        - `email_psicologo` (string, requerido): Un correo electrónico válido.
+        - `nombre` (string, opcional): Nombre completo del especialista.
+        - `alias` (string, requerido): Un apodo para identificarlo en la app (Ej. "Doc Principal", "Terapeuta Pareja").
+        - `email` (string, requerido): Correo al que se enviarán las alertas de crisis.
 
         **📤 Respuesta Exitosa (200 OK):**
-        ```json
-        {
-            "mensaje": "Correo de psicólogo asignado correctamente",
-            "email_asignado": "doctor@clinica.com"
-        }
-        ```
+        Devuelve el objeto completo del psicólogo recién creado, incluyendo su nuevo `id` de base de datos.
 
         **❌ Posibles Errores:**
         - `401 Unauthorized`: Token faltante o expirado.
-        - `404 Not Found`: El usuario no existe en la base de datos.
-        - `409 Conflict`: Ya existe un psicólogo asignado.
-        - `422 Unprocessable Entity`: El correo enviado no tiene un formato válido.
-        """
+        - `422 Unprocessable Entity`: Formato de correo inválido o falta el alias.
+    """
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
 
-    usuario = db.query(User).filter(User.user_id == user_id).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    if usuario.email_psicologo_asignado:
-        raise HTTPException(status_code=409, detail="Ya existe un psicólogo asignado")
-
-    usuario.email_psicologo_asignado = datos.email_psicologo
+    nuevo_psicologo = PsicologoUsuario(
+        user_id=user_id,
+        nombre=datos.nombre,
+        alias=datos.alias,
+        email=datos.email
+    )
+    db.add(nuevo_psicologo)
     db.commit()
+    db.refresh(nuevo_psicologo)
+    return nuevo_psicologo
 
-    return {
-        "mensaje": "Correo de psicólogo asignado correctamente",
-        "email_asignado": usuario.email_psicologo_asignado
-    }
 
-@router.put("/psicologo")
-def actualizar_psicologo(
-    datos: PsicologoUpdate,
+@router.get("/psicologos", response_model=List[PsicologoResponse])
+def listar_psicologos(
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     """
-        ### Actualizar Psicólogo Asignado
-        Actualiza o elimina el correo del psicólogo personal del usuario. Este correo 
-        tendrá prioridad para recibir las Alertas de Crisis.
-
-        **🔒 Requiere Autenticación:**
-        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
-
-        **📥 Request Body (JSON):**
-        - `email_psicologo` (string, opcional): Un correo electrónico válido. 
-        *Nota Frontend:* Si el usuario quiere desvincular a su psicólogo, enviar `null`.
-
-        **📤 Respuesta Exitosa (200 OK):**
-        ```json
-        {
-            "mensaje": "Correo de psicólogo actualizado correctamente",
-            "email_asignado": "doctor@clinica.com"
-        }
-        ```
-
-        **❌ Posibles Errores:**
-        - `401 Unauthorized`: Token faltante o expirado.
-        - `404 Not Found`: El usuario no existe en la base de datos.
-        - `422 Unprocessable Entity`: El correo enviado no tiene un formato válido.
-        """
-    Authorize.jwt_required()
-    user_id = Authorize.get_jwt_subject()
-
-    usuario = db.query(User).filter(User.user_id == user_id).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    usuario.email_psicologo_asignado = datos.email_psicologo
-    db.commit()
-    
-    return {
-        "mensaje": "Correo de psicólogo actualizado correctamente", 
-        "email_asignado": usuario.email_psicologo_asignado
-    }
-
-@router.get("/psicologo")
-def obtener_psicologo(
-    Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
-):
-    """
-        ### Obtener Psicólogo Asignado
-        Devuelve el correo del psicólogo actual del usuario. Si no tiene ninguno asignado, devolverá `null`.
+        ### Listar Psicólogos
+        Devuelve la lista de todos los psicólogos registrados por el usuario actual. 
+        En caso de una crisis, el sistema enviará correos de alerta a **todos** los psicólogos de esta lista.
 
         **🔒 Requiere Autenticación:**
         - Cookie `access_token_cookie` (No requiere CSRF por ser petición GET).
 
         **📤 Respuesta Exitosa (200 OK):**
-        ```json
-        {
-            "email_asignado": "doctor@clinica.com"
-        }
-        ```
-        *(Nota: Si no tiene psicólogo, el valor de `email_asignado` será `null`)*
-
-        **❌ Posibles Errores:**
-        - `401 Unauthorized`: Token faltante o expirado.
-        - `404 Not Found`: El usuario no existe en la base de datos.
-        """
+        Un array de objetos con los psicólogos. Si no tiene ninguno registrado, devuelve un array vacío `[]`.
+    """
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
-
-    usuario = db.query(User).filter(User.user_id == user_id).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    return {
-        "email_asignado": usuario.email_psicologo_asignado
-    }
+    
+    return db.query(PsicologoUsuario).filter(PsicologoUsuario.user_id == user_id).all()
 
 
-@router.delete("/psicologo")
-def eliminar_psicologo(
+@router.get("/psicologos/{psicologo_id}", response_model=PsicologoResponse)
+def obtener_psicologo_por_id(
+    psicologo_id: int,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     """
-        ### Eliminar Psicólogo Asignado
-        Desvincula al psicólogo del usuario actual, dejando el registro vacío. 
-        A partir de este momento, las alertas de crisis se enviarán al correo global de emergencia.
+        ### Obtener Psicólogo por ID
+        Devuelve los detalles de un psicólogo específico asociado al usuario.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` (No requiere CSRF).
+
+        **📤 Respuesta Exitosa (200 OK):**
+        El objeto JSON con los detalles del psicólogo.
+
+        **❌ Posibles Errores:**
+        - `404 Not Found`: Si el psicólogo no existe o no le pertenece al usuario autenticado.
+    """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+    
+    psicologo = db.query(PsicologoUsuario).filter(
+        PsicologoUsuario.id == psicologo_id, 
+        PsicologoUsuario.user_id == user_id
+    ).first()
+    
+    if not psicologo:
+        raise HTTPException(status_code=404, detail="Psicólogo no encontrado")
+    return psicologo
+
+
+@router.put("/psicologos/{psicologo_id}", response_model=PsicologoResponse)
+def actualizar_psicologo(
+    psicologo_id: int,
+    datos: PsicologoUpdate,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Actualizar Psicólogo
+        Modifica los datos (nombre, alias, correo) de un psicólogo existente. Solo se actualizarán los campos enviados en la petición.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
+
+        **📥 Path Parameter:**
+        - `psicologo_id` (integer): ID del psicólogo a editar.
+
+        **📤 Respuesta Exitosa (200 OK):**
+        Devuelve el objeto actualizado.
+        
+        **❌ Posibles Errores:**
+        - `404 Not Found`: Si el psicólogo no existe.
+    """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+    
+    psicologo = db.query(PsicologoUsuario).filter(
+        PsicologoUsuario.id == psicologo_id, 
+        PsicologoUsuario.user_id == user_id
+    ).first()
+    
+    if not psicologo:
+        raise HTTPException(status_code=404, detail="Psicólogo no encontrado")
+
+    update_data = datos.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(psicologo, key, value)
+
+    db.commit()
+    db.refresh(psicologo)
+    return psicologo
+
+
+@router.delete("/psicologos/{psicologo_id}")
+def eliminar_psicologo(
+    psicologo_id: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Eliminar Psicólogo
+        Borra a un psicólogo de la cuenta del usuario. Si se borran todos, las alertas futuras se enviarán al correo global del sistema.
 
         **🔒 Requiere Autenticación:**
         - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
 
         **📤 Respuesta Exitosa (200 OK):**
         ```json
-        {
-            "mensaje": "Psicólogo desvinculado exitosamente",
-            "email_asignado": null
-        }
+        { "mensaje": "Psicólogo eliminado exitosamente" }
         ```
-
-        **❌ Posibles Errores:**
-        - `400 Bad Request`: El usuario no tiene un psicólogo asignado actualmente (ya estaba vacío).
-        - `401 Unauthorized`: Token faltante o expirado.
-        - `404 Not Found`: El usuario no existe en la base de datos.
-        """
+    """
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
-
-    usuario = db.query(User).filter(User.user_id == user_id).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    if not usuario.email_psicologo_asignado:
-        raise HTTPException(status_code=400, detail="El usuario no tiene un psicólogo asignado actualmente")
-
-    usuario.email_psicologo_asignado = None
-    db.commit()
     
-    return {
-        "mensaje": "Psicólogo desvinculado exitosamente",
-        "email_asignado": None
-    }
+    psicologo = db.query(PsicologoUsuario).filter(
+        PsicologoUsuario.id == psicologo_id, 
+        PsicologoUsuario.user_id == user_id
+    ).first()
+    
+    if not psicologo:
+        raise HTTPException(status_code=404, detail="Psicólogo no encontrado")
+
+    db.delete(psicologo)
+    db.commit()
+    return {"mensaje": "Psicólogo eliminado exitosamente"}
 
 # ==========================================
 # 3. ENDPOINTS DE CONTACTOS DE EMERGENCIA
@@ -489,3 +508,115 @@ def obtener_tipos_relacion():
         {"id": 3, "relacion": "Pareja"},
         {"id": 4, "relacion": "Otro"}
     ]
+
+
+# ==========================================
+# 6. ENDPOINTS DE CORRIENTES FILOSÓFICAS
+# ==========================================
+
+@router.post("/corrientes", response_model=CorrienteResponse)
+def crear_corriente(
+    datos: CorrienteCreate, 
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Crear Corriente Filosófica
+        Añade una corriente filosófica a las preferencias del usuario actual.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
+
+        **📥 Request Body:**
+        - `nombre` (string, requerido): Nombre de la corriente (Ej. "Estoicismo", "Existencialismo").
+    """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    from app.models.corrientes import CorrienteFilosofica
+    nueva_corriente = CorrienteFilosofica(user_id=user_id, nombre=datos.nombre)
+    db.add(nueva_corriente)
+    db.commit()
+    db.refresh(nueva_corriente)
+    return nueva_corriente
+
+
+@router.get("/corrientes", response_model=List[CorrienteResponse])
+def listar_corrientes(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Listar Corrientes Filosóficas del Usuario
+        Devuelve la lista de corrientes filosóficas preferidas por el usuario actual.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie`
+    """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    from app.models.corrientes import CorrienteFilosofica
+    return db.query(CorrienteFilosofica).filter(CorrienteFilosofica.user_id == user_id).all()
+
+
+@router.put("/corrientes/{corriente_id}", response_model=CorrienteResponse)
+def actualizar_corriente(
+    corriente_id: int, 
+    datos: CorrienteCreate, 
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Actualizar Corriente Filosófica
+        Modifica el nombre de una corriente en la lista del usuario.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
+    """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    from app.models.corrientes import CorrienteFilosofica
+    corriente = db.query(CorrienteFilosofica).filter(
+        CorrienteFilosofica.id == corriente_id,
+        CorrienteFilosofica.user_id == user_id
+    ).first()
+    
+    if not corriente:
+        raise HTTPException(status_code=404, detail="Corriente no encontrada o no pertenece al usuario")
+    
+    corriente.nombre = datos.nombre
+    db.commit()
+    db.refresh(corriente)
+    return corriente
+
+
+@router.delete("/corrientes/{corriente_id}")
+def eliminar_corriente(
+    corriente_id: int, 
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+        ### Eliminar Corriente Filosófica
+        Borra una corriente de las preferencias del usuario.
+
+        **🔒 Requiere Autenticación:**
+        - Cookie `access_token_cookie` y Header `X-CSRF-TOKEN`.
+    """
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+
+    from app.models.corrientes import CorrienteFilosofica
+    corriente = db.query(CorrienteFilosofica).filter(
+        CorrienteFilosofica.id == corriente_id,
+        CorrienteFilosofica.user_id == user_id
+    ).first()
+    
+    if not corriente:
+        raise HTTPException(status_code=404, detail="Corriente no encontrada o no pertenece al usuario")
+    
+    db.delete(corriente)
+    db.commit()
+    return {"mensaje": "Corriente eliminada exitosamente"}

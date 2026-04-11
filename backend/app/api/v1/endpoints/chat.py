@@ -21,6 +21,7 @@ from app.models.configuracion import ConfiguracionSistema
 import random
 from app.models.user import User 
 from app.core.risk_detector import evaluar_riesgo
+from app.models.psicologos import PsicologoUsuario
 
 router = APIRouter()
 logger = logging.getLogger("chat_endpoint")
@@ -167,21 +168,22 @@ async def chat_gpt(
             descripcion=user_message, nivel_alerta=nivel_riesgo, atendido=False
         )
 
-        usuario_actual = db.query(User).filter(User.user_id == user_id).first()
+        # 1. Obtener la configuración del correo global
         config_email = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "EMAIL_ALERTA_CRISIS").first()
-        
-        email_paciente = usuario_actual.email_psicologo_asignado if usuario_actual else None
-        if email_paciente and email_paciente.strip().lower() in ["null", "none", ""]: 
-            email_paciente = None
-            
-        email_global = config_email.valor if config_email else None
-        if email_global and email_global.strip().lower() in ["null", "none", ""]: 
-            email_global = "iamind.app@gmail.com"
-            
-        email_destino = email_paciente if email_paciente else (email_global or "iamind.app@gmail.com")
+        email_global = config_email.valor if config_email and config_email.valor.strip().lower() not in ["null", "none", ""] else "iamind.app@gmail.com"
 
-        background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_destino, nivel_riesgo)
+        # 2. Buscar TODOS los psicólogos asignados a este usuario
+        psicologos_db = db.query(PsicologoUsuario).filter(PsicologoUsuario.user_id == user_id).all()
         
+        # 3. Enviar correos a la lista de psicólogos. Si no hay ninguno, enviar al global.
+        if psicologos_db:
+            for psico in psicologos_db:
+                if psico.email and psico.email.strip():
+                    background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, psico.email, nivel_riesgo)
+        else:
+            # No tiene psicólogos, usamos el respaldo global
+            background_tasks.add_task(enviar_alerta_crisis, user_id, user_message, emocion_detectada, email_global, nivel_riesgo)
+            
         if nivel_riesgo == "alto":
             is_crisis = True
             frase_psicologo = obtener_frase_segura(db, nivel_riesgo)
