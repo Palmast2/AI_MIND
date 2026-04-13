@@ -7,7 +7,11 @@ import RegisterScreen from 'screens/RegisterScreen';
 import SkinScreen from 'screens/SkinsScreen'
 import FormScreen from 'screens/FormScreen';
 import OptionsScreen from 'screens/OptionScreen';
-import AvisoPrivacidad from 'screens/AvisoPrivacidad';
+import AvisoPrivacidad from 'screens/documentos legales/AvisoPrivacidad';
+import UsoResponsableIA from 'screens/documentos legales/UsoResponsableIA';
+import CondicionesGeneralesUso from 'screens/documentos legales/CondicionesGeneralesUso';
+import PoliticaManejoCrisis from 'screens/documentos legales/PoliticaManejoCrisis';
+import TerminosCondicionesServicio from 'screens/documentos legales/TerminosCondicionesServicio';
 import InfoContacto from 'screens/screensOptions/screensContactoEmergencia/InfoContacto'
 import InfoPsicologo from 'screens/screensOptions/screensContactoEmergencia/InfoPsicologo';
 import ListaContactos from 'screens/screensOptions/screensContactoEmergencia/ListContacto'
@@ -35,6 +39,10 @@ export default function App() {
 
         {/*SCREAN DE AVISO DE PRIVACIDAD*/}
         <Stack.Screen name="AvisoPrivacidad" component={AvisoPrivacidad} options={{title: "Aviso de Privacidad"}}/>
+        <Stack.Screen name="UsoResponsableIA" component={UsoResponsableIA} options={{title: "Uso responsable de la IA"}}/>
+        <Stack.Screen name="CondicionesGeneralesUso" component={CondicionesGeneralesUso} options={{title: "Condiciones generales de uso"}}/>
+        <Stack.Screen name="PoliticaManejoCrisis" component={PoliticaManejoCrisis} options={{title: "Politica de manejo de crisis"}}/>
+        <Stack.Screen name="TerminosCondicionesServicio" component={TerminosCondicionesServicio} options={{title: "Terminos y condiciones"}}/>
         {/*SCREANS DE OPCIONES*/}
 
         {/*SCREANS DE INFORMACION PERSONAL*/}
