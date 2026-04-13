@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Linking
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,10 +23,26 @@ type Contacto = {
   id: number;
 };
 
-export default function ListaContactos({ navigation }: any) {
+export default function ListaContactosEmergencia({ navigation }: any) {
   const [contactos, setContactos] = useState<Contacto[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const callEmergencyContact = async (phone: string | number) => {
+    try {
+      const cleanPhone = String(phone ?? "").replace(/[^\d+]/g, "");
+
+      if (!cleanPhone) {
+        Alert.alert("Error", "No se encontró un número válido.");
+        return;
+      }
+
+      await Linking.openURL(`tel:${cleanPhone}`);
+    } catch (error) {
+      console.error("callEmergencyContact error:", error);
+      Alert.alert("Error", "No se pudo abrir la llamada.");
+    }
+  };
 
   const obtenerContactos = useCallback(async (isRefresh = false) => {
     try {
@@ -103,11 +120,7 @@ export default function ListaContactos({ navigation }: any) {
                 <TouchableOpacity
                   key={contacto.id}
                   className="w-full border border-white rounded-xl px-4 py-4 flex-row items-center justify-between mb-4"
-                  onPress={() =>
-                    navigation.navigate("OptionsModificarContacto", {
-                      contacto,
-                    })
-                  }
+                  onPress={() => callEmergencyContact(contacto.telefono)}
                 >
                   <View className="flex-1">
                     <Text className="text-white text-lg font-semibold">
