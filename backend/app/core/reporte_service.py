@@ -19,10 +19,20 @@ def contar_reportes_hoy(db: Session, user_id: str) -> int:
         SELECT COUNT(*) 
         FROM reportes_uso
         WHERE user_id = :user_id
-        AND DATE(created_at) = :today
+        AND DATE(created_at) = CURRENT_DATE
     """)
-    result = db.execute(stmt, {"user_id": user_id, "today": date.today()}).scalar()
+    result = db.execute(stmt, {"user_id": user_id}).scalar()
     return result or 0
+
+def limpiar_bytes(dato):
+    """Convierte memoryview o bytes a string UTF-8."""
+    if not dato:
+        return ""
+    if isinstance(dato, memoryview):
+        return dato.tobytes().decode('utf-8', errors='ignore')
+    if isinstance(dato, bytes):
+        return dato.decode('utf-8', errors='ignore')
+    return str(dato)
 
 def registrar_reporte(db: Session, user_id: str):
     """Registra el uso de un reporte en la tabla reportes_uso."""
@@ -69,11 +79,12 @@ def obtener_directrices(db: Session):
             directriz, 
             actividades_practicas, 
             acciones_urgentes, 
-            pgp_sym_decrypt(advertencias, :key) AS advertencias,
-            pgp_sym_decrypt(palabras_clave, :key) AS palabras_clave
+            pgp_sym_decrypt_bytea(advertencias, :key) AS advertencias,
+            pgp_sym_decrypt_bytea(palabras_clave, :key) AS palabras_clave
         FROM directrices_terapeuticas
     """)
     resultados = db.execute(stmt, {"key": os.getenv("PGP_KEY")}).mappings().all()
+    
     directrices = []
     for r in resultados:
         directrices.append({
@@ -81,8 +92,8 @@ def obtener_directrices(db: Session):
             "directriz": r["directriz"],
             "actividades": r["actividades_practicas"],
             "acciones_urgentes": r["acciones_urgentes"],
-            "advertencias": r["advertencias"],
-            "palabras_clave": r["palabras_clave"]
+            "advertencias": limpiar_bytes(r["advertencias"]),       
+            "palabras_clave": limpiar_bytes(r["palabras_clave"])  
         })
     return directrices
 
