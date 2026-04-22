@@ -10,6 +10,3 @@ CREATE TABLE reportes_uso (
     user_id UUID NOT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
-
-ALTER TABLE usuarios 
-ADD COLUMN email_psicologo_asignado VARCHAR(255);

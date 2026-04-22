@@ -37,7 +37,7 @@ NEGATIVE_KEYWORDS = ["mal", "triste", "desesperado", "harto", "deprimido",]
 
 def map_emotion(emotion_result, user_message=None, db=None):
     if user_message and db:
-        riesgo = evaluar_riesgo(user_message, db)
+        riesgo = evaluar_riesgo(user_message, db, emotion_result)
         if riesgo == "alto":
             return "crisis emocional / ideacion suicida"
 
