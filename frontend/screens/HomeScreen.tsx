@@ -153,20 +153,12 @@ export async function downloadAndOpenMonthlyPdfExpo(): Promise<void> {
 }
 
 async function fetchWeeklyEmotions(): Promise<number[]> {
-  const cookiesString = await AsyncStorage.getItem('cookies');
-  if (!cookiesString) throw new Error('No se encontraron cookies guardadas');
-
-  const cookies = JSON.parse(cookiesString);
-  const token = cookies.csrf_access_token;
-
-  const resp = await fetch('https://api.aimind.portablelab.work/api/v1/emociones/semanales', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': token,
-    },
-    credentials: 'include',
-  });
+  const resp = await fetchWithAuthRetry(
+    'https://api.aimind.portablelab.work/api/v1/emociones/semanales',
+    {
+      method: 'GET',
+    }
+  );
 
   if (!resp.ok) throw new Error(`Error emociones: ${resp.status}`);
 
@@ -180,6 +172,117 @@ async function fetchWeeklyEmotions(): Promise<number[]> {
   const otros = Number(w['otros'] ?? 0);
 
   return [tristeza, alegria, tranquilidad, sorpresa, otros];
+}
+
+function parseSetCookieHeader(setCookieHeader: string) {
+  const result: Record<string, string> = {};
+
+  setCookieHeader.split(/,(?=\s*\w+=)/).forEach((cookiePart) => {
+    const firstPair = cookiePart.split(';')[0];
+    const eqIndex = firstPair.indexOf('=');
+
+    if (eqIndex > -1) {
+      const key = firstPair.slice(0, eqIndex).trim();
+      const value = firstPair.slice(eqIndex + 1).trim();
+      result[key] = value;
+    }
+  });
+
+  return result;
+}
+
+async function saveCookies(cookies: Record<string, string>) {
+  await AsyncStorage.setItem('cookies', JSON.stringify(cookies));
+}
+
+async function mergeAndSaveCookies(newCookies: Record<string, string>) {
+  const prev = await AsyncStorage.getItem('cookies');
+  const prevObj = prev ? JSON.parse(prev) : {};
+  const merged = { ...prevObj, ...newCookies };
+  await saveCookies(merged);
+  return merged;
+}
+
+async function getAccessToken(): Promise<string> {
+  const cookiesString = await AsyncStorage.getItem('cookies');
+  if (!cookiesString) throw new Error('No se encontraron cookies guardadas');
+
+  const cookies = JSON.parse(cookiesString);
+  const token = cookies.csrf_access_token;
+
+  if (!token) throw new Error('Falta csrf_access_token');
+  return token;
+}
+
+async function getRefreshToken(): Promise<string> {
+  const cookiesString = await AsyncStorage.getItem('cookies');
+  if (!cookiesString) throw new Error('No se encontraron cookies guardadas');
+
+  const cookies = JSON.parse(cookiesString);
+  const token = cookies.csrf_refresh_token;
+
+  if (!token) throw new Error('Falta csrf_refresh_token');
+  return token;
+}
+
+async function refreshTokens(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const refreshCsrf = await getRefreshToken();
+
+    const response = await fetch('https://api.aimind.portablelab.work/api/v1/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': refreshCsrf,
+      },
+      credentials: 'include' as any,
+    });
+
+    if (!response.ok) {
+      const txt = await response.text().catch(() => '');
+      return { ok: false, error: `Refresh falló (${response.status}): ${txt}` };
+    }
+
+    const setCookie = response.headers.get('set-cookie');
+    if (setCookie) {
+      const cookiesObj = parseSetCookieHeader(setCookie);
+      await mergeAndSaveCookies(cookiesObj);
+    }
+
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: 'Error inesperado en refreshTokens' };
+  }
+}
+
+async function fetchWithAuthRetry(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getAccessToken();
+
+  const doRequest = async (csrfToken: string) =>
+    fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        ...(options.headers || {}),
+      },
+      credentials: 'include' as any,
+    });
+
+  let response = await doRequest(token);
+
+  if (response.status === 401) {
+    const refreshed = await refreshTokens();
+    if (!refreshed.ok) {
+      throw new Error(`Refresh falló: ${refreshed.error ?? 'desconocido'}`);
+    }
+
+    const retryToken = await getAccessToken();
+    response = await doRequest(retryToken);
+  }
+
+  return response;
 }
 
 export default function HomeScreen({ navigation }: any) {
@@ -542,7 +645,11 @@ export default function HomeScreen({ navigation }: any) {
   const [composerHeight, setComposerHeight] = useState(72);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#00634C' }}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: '#00634C' }}
+      accessible={true}
+      accessibilityLabel="Pantalla principal"
+      accessibilityHint="Aquí puedes ver el radar de emociones, la imagen del asistente y escribir o grabar un mensaje">
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAwareScrollView
           ref={scrollRef}
@@ -551,17 +658,22 @@ export default function HomeScreen({ navigation }: any) {
             flexGrow: 1,
             paddingTop: 16,
             paddingHorizontal: 16,
-            // deja espacio para el composer fijo (no se moverá con el teclado)
             paddingBottom: composerHeight + 16 + insets.bottom,
           }}
           enableOnAndroid
-          enableAutomaticScroll={false} // ⛔️ desactivado para que no empuje el layout
+          enableAutomaticScroll={false}
           enableResetScrollToCoords={false}
           keyboardOpeningTime={0}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          accessible={false}>
           {/* Radar de emociones */}
-          <View style={{ width: 25, height: 25, alignSelf: 'center', transform: [{ scale: 0.5 }] }}>
+          <View
+            style={{ width: 25, height: 25, alignSelf: 'center', transform: [{ scale: 0.5 }] }}
+            accessible={true}
+            accessibilityRole="image"
+            accessibilityLabel="Radar de emociones"
+            accessibilityHint="Muestra un resumen visual de tus emociones actuales">
             <RadarChart
               data={radarValues}
               labels={radarLabels}
@@ -572,26 +684,39 @@ export default function HomeScreen({ navigation }: any) {
             />
           </View>
 
-          {/* Imagen del pet (ya no se moverá con el teclado) */}
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Image source={imageSource} style={{ width: 300, height: 300 }} resizeMode="contain" />
+          {/* Imagen del pet */}
+          <View
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+            accessible={false}>
+            <Image
+              source={imageSource}
+              style={{ width: 300, height: 300 }}
+              resizeMode="contain"
+              accessible={true}
+              accessibilityRole="image"
+              accessibilityLabel="Imagen del asistente virtual"
+            />
           </View>
         </KeyboardAwareScrollView>
       </TouchableWithoutFeedback>
 
-      {/* Composer FIJO (solo esto sube) */}
+      {/* Composer FIJO */}
       {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={headerHeight + insets.top}>
+        <KeyboardAvoidingView
+          behavior="padding"
+          keyboardVerticalOffset={headerHeight + insets.top}
+          accessible={false}>
           <View
             onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
             style={{
               position: 'absolute',
               left: 16,
               right: 16,
-              bottom: insets.bottom + 8, // iOS lo levanta KAV
-            }}>
+              bottom: insets.bottom + 8,
+            }}
+            accessible={false}>
             {composerMode === 'record' ? (
-              <View style={{ width: '100%', gap: 8 }}>
+              <View style={{ width: '100%', gap: 8 }} accessible={false}>
                 {/* Barra superior */}
                 <View
                   style={{
@@ -604,7 +729,10 @@ export default function HomeScreen({ navigation }: any) {
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 10,
-                  }}>
+                  }}
+                  accessible={true}
+                  accessibilityRole="text"
+                  accessibilityLabel={`Grabación en curso, tiempo ${formatTime(recordSeconds)}`}>
                   <VoiceIcon size={22} color="#00634C" />
                   <Text style={{ color: '#4A4A4A', fontSize: 18, fontWeight: '600' }}>
                     {formatTime(recordSeconds)}
@@ -624,18 +752,29 @@ export default function HomeScreen({ navigation }: any) {
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                  }}>
+                  }}
+                  accessible={false}>
                   <TouchableOpacity
                     onPress={deleteRecording}
                     disabled={loading}
-                    style={{ padding: 10 }}>
+                    style={{ padding: 10 }}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel="Eliminar grabación"
+                    accessibilityHint="Borra el audio grabado"
+                    accessibilityState={{ disabled: loading }}>
                     <DeleteIcon size={24} color="black" />
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     onPress={isPaused ? resumeRecording : pauseRecording}
                     disabled={loading}
-                    style={{ padding: 10 }}>
+                    style={{ padding: 10 }}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
+                    accessibilityHint="Controla la grabación actual"
+                    accessibilityState={{ disabled: loading }}>
                     {isPaused ? (
                       <PlayIcon size={28} color="black" />
                     ) : (
@@ -646,7 +785,12 @@ export default function HomeScreen({ navigation }: any) {
                   <TouchableOpacity
                     onPress={onSendRecording}
                     disabled={loading}
-                    style={{ padding: 10 }}>
+                    style={{ padding: 10 }}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel="Enviar grabación"
+                    accessibilityHint="Envía el audio grabado"
+                    accessibilityState={{ disabled: loading }}>
                     <SendIcon size={24} color="black" />
                   </TouchableOpacity>
                 </View>
@@ -666,7 +810,8 @@ export default function HomeScreen({ navigation }: any) {
                   shadowRadius: 4,
                   elevation: 3,
                   marginBottom: 8,
-                }}>
+                }}
+                accessible={false}>
                 <TextInput
                   ref={inputRef}
                   placeholder="¿Cómo ha estado tu día?"
@@ -690,9 +835,11 @@ export default function HomeScreen({ navigation }: any) {
                   onFocus={handleFocus}
                   onBlur={handleBlur}
                   editable={!loading}
+                  accessible={true}
+                  accessibilityLabel="Mensaje"
+                  accessibilityHint="Escribe aquí cómo te ha estado y presiona enviar"
                 />
 
-                {/* Enviar texto */}
                 <TouchableOpacity
                   onPress={handleSend}
                   disabled={!text.trim() || loading}
@@ -703,11 +850,15 @@ export default function HomeScreen({ navigation }: any) {
                     paddingHorizontal: 16,
                     paddingVertical: 10,
                     opacity: !text.trim() || loading ? 0.6 : 1,
-                  }}>
+                  }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Enviar mensaje"
+                  accessibilityHint="Envía el mensaje escrito"
+                  accessibilityState={{ disabled: !text.trim() || loading }}>
                   <Text style={{ color: 'white', fontWeight: '700' }}>Enviar</Text>
                 </TouchableOpacity>
 
-                {/* Mic */}
                 <TouchableOpacity
                   onPress={startRecording}
                   disabled={loading}
@@ -718,7 +869,12 @@ export default function HomeScreen({ navigation }: any) {
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                     opacity: loading ? 0.6 : 1,
-                  }}>
+                  }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Iniciar grabación"
+                  accessibilityHint="Comienza a grabar un mensaje de voz"
+                  accessibilityState={{ disabled: loading }}>
                   <VoiceIcon size={22} color="black" />
                 </TouchableOpacity>
               </View>
@@ -726,7 +882,6 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         </KeyboardAvoidingView>
       ) : (
-        // ANDROID: movemos SOLO el composer con la altura del teclado
         <View
           onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
           style={{
@@ -734,9 +889,10 @@ export default function HomeScreen({ navigation }: any) {
             left: 16,
             right: 16,
             bottom: insets.bottom + 8,
-          }}>
+          }}
+          accessible={false}>
           {composerMode === 'record' ? (
-            <View style={{ width: '100%', gap: 8 }}>
+            <View style={{ width: '100%', gap: 8 }} accessible={false}>
               {/* Barra superior */}
               <View
                 style={{
@@ -749,7 +905,10 @@ export default function HomeScreen({ navigation }: any) {
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 10,
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="text"
+                accessibilityLabel={`Grabación en curso, tiempo ${formatTime(recordSeconds)}`}>
                 <VoiceIcon size={22} color="#00634C" />
                 <Text style={{ color: '#4A4A4A', fontSize: 18, fontWeight: '600' }}>
                   {formatTime(recordSeconds)}
@@ -769,18 +928,29 @@ export default function HomeScreen({ navigation }: any) {
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                }}>
+                }}
+                accessible={false}>
                 <TouchableOpacity
                   onPress={deleteRecording}
                   disabled={loading}
-                  style={{ padding: 10 }}>
+                  style={{ padding: 10 }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Eliminar grabación"
+                  accessibilityHint="Borra el audio grabado"
+                  accessibilityState={{ disabled: loading }}>
                   <DeleteIcon size={24} color="black" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   onPress={isPaused ? resumeRecording : pauseRecording}
                   disabled={loading}
-                  style={{ padding: 10 }}>
+                  style={{ padding: 10 }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
+                  accessibilityHint="Controla la grabación actual"
+                  accessibilityState={{ disabled: loading }}>
                   {isPaused ? (
                     <PlayIcon size={28} color="black" />
                   ) : (
@@ -791,7 +961,12 @@ export default function HomeScreen({ navigation }: any) {
                 <TouchableOpacity
                   onPress={onSendRecording}
                   disabled={loading}
-                  style={{ padding: 10 }}>
+                  style={{ padding: 10 }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Enviar grabación"
+                  accessibilityHint="Envía el audio grabado"
+                  accessibilityState={{ disabled: loading }}>
                   <SendIcon size={24} color="black" />
                 </TouchableOpacity>
               </View>
@@ -811,7 +986,8 @@ export default function HomeScreen({ navigation }: any) {
                 shadowRadius: 4,
                 elevation: 3,
                 marginBottom: 8,
-              }}>
+              }}
+              accessible={false}>
               <TextInput
                 ref={inputRef}
                 placeholder="¿Cómo ha estado tu día?"
@@ -835,9 +1011,11 @@ export default function HomeScreen({ navigation }: any) {
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 editable={!loading}
+                accessible={true}
+                accessibilityLabel="Mensaje"
+                accessibilityHint="Escribe aquí cómo te ha estado y presiona enviar"
               />
 
-              {/* Enviar texto */}
               <TouchableOpacity
                 onPress={handleSend}
                 disabled={!text.trim() || loading}
@@ -848,11 +1026,15 @@ export default function HomeScreen({ navigation }: any) {
                   paddingHorizontal: 16,
                   paddingVertical: 10,
                   opacity: !text.trim() || loading ? 0.6 : 1,
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Enviar mensaje"
+                accessibilityHint="Envía el mensaje escrito"
+                accessibilityState={{ disabled: !text.trim() || loading }}>
                 <Text style={{ color: 'white', fontWeight: '700' }}>Enviar</Text>
               </TouchableOpacity>
 
-              {/* Mic */}
               <TouchableOpacity
                 onPress={startRecording}
                 disabled={loading}
@@ -863,7 +1045,12 @@ export default function HomeScreen({ navigation }: any) {
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                   opacity: loading ? 0.6 : 1,
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Iniciar grabación"
+                accessibilityHint="Comienza a grabar un mensaje de voz"
+                accessibilityState={{ disabled: loading }}>
                 <VoiceIcon size={22} color="black" />
               </TouchableOpacity>
             </View>
@@ -872,7 +1059,12 @@ export default function HomeScreen({ navigation }: any) {
       )}
 
       {/* Modal de carga para la descarga/generación del PDF */}
-      <Modal visible={isDownloading} transparent animationType="fade" statusBarTranslucent>
+      <Modal
+        visible={isDownloading}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {}}>
         <View
           style={{
             flex: 1,
@@ -880,7 +1072,10 @@ export default function HomeScreen({ navigation }: any) {
             alignItems: 'center',
             justifyContent: 'center',
             padding: 24,
-          }}>
+          }}
+          accessible={true}
+          accessibilityViewIsModal={true}
+          accessibilityLabel="Generando informe">
           <View
             style={{
               width: 280,
@@ -888,7 +1083,11 @@ export default function HomeScreen({ navigation }: any) {
               borderRadius: 16,
               backgroundColor: 'white',
               alignItems: 'center',
-            }}>
+            }}
+            accessible={true}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            accessibilityLabel="Generando informe. Esto puede tardar un poco.">
             <ActivityIndicator size="large" />
             <Text style={{ marginTop: 12, fontWeight: '700', fontSize: 16, color: '#0a0a0a' }}>
               Generando informe…

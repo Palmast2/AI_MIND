@@ -90,9 +90,9 @@ export default function LoginScreen({ navigation }: any) {
       setPassword('');
 
       // 👇 Validación extra: si datos_demograficos viene null => Form
-      console.log(result)
+      console.log(result);
       const datos = result.data?.user?.datos_demograficos; // usa el path real de tu respuesta
-      console.log(datos)
+      console.log(datos);
 
       if (datos == null) {
         navigation.navigate('Form'); // o navigation.reset(...) si quieres evitar volver a Login
@@ -116,63 +116,77 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const loginApi = async (email: string, password: string): Promise<LoginResult> => {
-  try {
-    const response = await fetch('https://api.aimind.portablelab.work/api/v1/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include' as any,
-      body: JSON.stringify({ email, password }),
-    });
-
-    // intenta leer el json SIEMPRE (cuando exista)
-    let data: any = null;
     try {
-      data = await response.json();
-    } catch (_) {}
-
-    if (response.status === 401) {
-      return { ok: false, error: 'Credenciales inválidas. Verifica tu correo y contraseña.' };
-    }
-    if (!response.ok) {
-      return { ok: false, error: data?.msg || data?.message || 'No se pudo iniciar sesión.' };
-    }
-
-    // OJO: en React Native normalmente NO puedes leer "set-cookie"
-    // pero de todas formas mantengo tu lógica.
-    const setCookie = response.headers.get('set-cookie');
-    if (setCookie) {
-      const cookiesObj: Record<string, string> = {};
-      setCookie.split(/,(?=[^;]+=[^;]+)/g).forEach((cookieStr) => {
-        const [pair] = cookieStr.split(';');
-        const [name, value] = pair.split('=').map((s) => s.trim());
-        if (name) cookiesObj[name] = value ?? '';
+      const response = await fetch('https://api.aimind.portablelab.work/api/v1/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include' as any,
+        body: JSON.stringify({ email, password }),
       });
-      await saveCookies(cookiesObj);
-    }
 
-    // ✅ aquí ya regresamos el JSON esperado
-    return { ok: true, data: data as LoginResponse };
-  } catch (error) {
-    console.error(error);
-    return { ok: false, error: 'Hubo un problema de conexión. Intenta nuevamente.' };
-  }
-};
+      // intenta leer el json SIEMPRE (cuando exista)
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (_) {}
+
+      if (response.status === 401) {
+        return { ok: false, error: 'Credenciales inválidas. Verifica tu correo y contraseña.' };
+      }
+      if (!response.ok) {
+        return { ok: false, error: data?.msg || data?.message || 'No se pudo iniciar sesión.' };
+      }
+
+      // OJO: en React Native normalmente NO puedes leer "set-cookie"
+      // pero de todas formas mantengo tu lógica.
+      const setCookie = response.headers.get('set-cookie');
+      if (setCookie) {
+        const cookiesObj: Record<string, string> = {};
+        setCookie.split(/,(?=[^;]+=[^;]+)/g).forEach((cookieStr) => {
+          const [pair] = cookieStr.split(';');
+          const [name, value] = pair.split('=').map((s) => s.trim());
+          if (name) cookiesObj[name] = value ?? '';
+        });
+        await saveCookies(cookiesObj);
+      }
+
+      // ✅ aquí ya regresamos el JSON esperado
+      return { ok: true, data: data as LoginResponse };
+    } catch (error) {
+      console.error(error);
+      return { ok: false, error: 'Hubo un problema de conexión. Intenta nuevamente.' };
+    }
+  };
 
   return (
-    <SafeAreaView className="flex-1 bg-emerald-900">
+    <SafeAreaView
+      className="flex-1 bg-emerald-900"
+      accessibilityLabel="Pantalla de inicio de sesión"
+      accessibilityHint="Aquí puedes ingresar tu correo y contraseña para acceder a tu cuenta">
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAwareScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ flexGrow: 1 }}>
+          contentContainerStyle={{ flexGrow: 1 }}
+          accessible={false}>
           <View className="flex-1 px-6">
             {/* Título */}
-            <View className="mb-10 mt-6 items-center pt-10">
+            <View
+              className="mb-10 mt-6 items-center pt-10"
+              accessible={true}
+              accessibilityRole="header"
+              accessibilityLabel="IA MIND">
               <Text className="text-5xl font-extrabold tracking-widest text-white">IA MIND</Text>
             </View>
 
             {/* Formulario */}
-            <View className="flex-1 justify-center gap-4">
-              <Text className="mb-2 text-3xl font-extrabold text-white">
+            <View
+              className="flex-1 justify-center gap-4"
+              accessible={false}>
+              <Text
+                className="mb-2 text-3xl font-extrabold text-white"
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="Inicia sesión en tu cuenta">
                 Inicia sesión en tu cuenta
               </Text>
 
@@ -186,10 +200,19 @@ export default function LoginScreen({ navigation }: any) {
                 className="w-full rounded-2xl border border-emerald-700 bg-emerald-800/60 px-5 py-4 text-white"
                 editable={!loading}
                 maxLength={MAX_EMAIL_LEN}
+                accessible={true}
+                accessibilityLabel="Correo electrónico"
+                accessibilityHint="Ingresa tu correo electrónico"
+                accessibilityRole="text"
+                autoComplete="email"
+                textContentType="emailAddress"
+                importantForAccessibility="yes"
               />
 
               {/* Input de contraseña con botón de ojo */}
-              <View className="w-full flex-row items-center rounded-2xl border border-emerald-700 bg-emerald-800/60 px-3">
+              <View
+                className="w-full flex-row items-center rounded-2xl border border-emerald-700 bg-emerald-800/60 px-3"
+                accessible={false}>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
@@ -202,12 +225,23 @@ export default function LoginScreen({ navigation }: any) {
                   textContentType="password"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  accessible={true}
+                  accessibilityLabel="Contraseña"
+                  accessibilityHint={
+                    showPassword
+                      ? 'Campo de contraseña visible. Ingresa tu contraseña.'
+                      : 'Campo de contraseña oculto. Ingresa tu contraseña.'
+                  }
+                  accessibilityRole="text"
+                  importantForAccessibility="yes"
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   accessible={true}
                   accessibilityRole="button"
                   accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  accessibilityHint="Activa este botón para mostrar u ocultar el contenido de la contraseña"
+                  accessibilityState={{ disabled: loading }}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   disabled={loading}>
                   {showPassword ? (
@@ -221,9 +255,20 @@ export default function LoginScreen({ navigation }: any) {
               <TouchableOpacity
                 onPress={onLogin}
                 disabled={loading}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={loading ? 'Iniciando sesión' : 'Iniciar sesión'}
+                accessibilityHint="Presiona para entrar a tu cuenta"
+                accessibilityState={{ disabled: loading, busy: loading }}
                 className={`mt-6 w-full items-center rounded-2xl ${loading ? 'bg-white/70' : 'bg-white'} py-4`}>
                 {loading ? (
-                  <ActivityIndicator />
+                  <View
+                    accessible={true}
+                    accessibilityLabel="Cargando"
+                    accessibilityHint="Se está procesando el inicio de sesión"
+                    accessibilityLiveRegion="polite">
+                    <ActivityIndicator />
+                  </View>
                 ) : (
                   <Text className="text-xl font-extrabold text-emerald-900">Iniciar Sesión</Text>
                 )}
@@ -231,19 +276,39 @@ export default function LoginScreen({ navigation }: any) {
             </View>
 
             {/* Link a registro */}
-            <View className="mb-6 mt-auto items-center">
-              <View className="flex-row items-center">
-                <Text className="text-xl text-white/80">¿No estás registrado?</Text>
+            <View
+              className="mb-6 mt-auto items-center"
+              accessible={false}>
+              <View className="flex-row items-center" accessible={false}>
+                <Text
+                  className="text-xl text-white/80"
+                  accessible={true}
+                  accessibilityLabel="¿No estás registrado?">
+                  ¿No estás registrado?
+                </Text>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('Register')}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Regístrate"
+                  accessibilityHint="Abre la pantalla de registro"
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Text className="ml-2 text-xl font-bold text-white underline">Regístrate</Text>
                 </TouchableOpacity>
               </View>
-              <View className="flex-row items-center">
-                <Text className="text-sm text-white/80">Le nuestro</Text>
+              <View className="flex-row items-center" accessible={false}>
+                <Text
+                  className="text-sm text-white/80"
+                  accessible={true}
+                  accessibilityLabel="Lee nuestro">
+                  Le nuestro
+                </Text>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('AvisoPrivacidad')}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Aviso de Privacidad"
+                  accessibilityHint="Abre el aviso de privacidad"
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Text className="ml-2 text-sm font-bold text-white underline ">Aviso de Privacidad</Text>
                 </TouchableOpacity>
