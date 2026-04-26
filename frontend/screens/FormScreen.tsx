@@ -23,15 +23,36 @@ const TEXT_DIM = 'rgba(255,255,255,0.90)';
 
 function SelectBox({ label, value, placeholder = 'Seleccionar', onPress, disabled }) {
   return (
-    <View style={{ marginBottom: 14, opacity: disabled ? 0.6 : 1 }}>
-      <Text style={styles.label}>{label}</Text>
+    <View
+      style={{ marginBottom: 14, opacity: disabled ? 0.6 : 1 }}
+      accessible={false}>
+      <Text
+        style={styles.label}
+        accessibilityRole="text"
+        accessible={true}
+        accessibilityLabel={label}>
+        {label}
+      </Text>
 
       <TouchableOpacity
         activeOpacity={0.85}
         style={styles.select}
         onPress={onPress}
-        disabled={disabled}>
-        <Text style={[styles.selectText, !value && { opacity: 0.85 }]}>{value ?? placeholder}</Text>
+        disabled={disabled}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityHint={
+          value
+            ? `Valor seleccionado: ${value}. Presiona para cambiarlo`
+            : `Presiona para seleccionar ${label.toLowerCase()}`
+        }
+        accessibilityState={{ disabled: !!disabled }}>
+        <Text
+          style={[styles.selectText, !value && { opacity: 0.85 }]}
+          accessible={false}>
+          {value ?? placeholder}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -206,39 +227,72 @@ export default function FormScreen() {
   };
 
   const ConsentCheck = ({ value, onToggle }) => (
-    <TouchableOpacity activeOpacity={0.8} onPress={onToggle} style={styles.consentRow}>
-      <View style={[styles.checkbox, value && styles.checkboxOn]}>
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={onToggle}
+      style={styles.consentRow}
+      accessible={true}
+      accessibilityRole="checkbox"
+      accessibilityLabel="Consentimiento para uso estadístico"
+      accessibilityHint="Activa o desactiva el permiso para usar tus datos con fines estadísticos"
+      accessibilityState={{ checked: value }}>
+      <View
+        style={[styles.checkbox, value && styles.checkboxOn]}
+        accessible={false}>
         {value ? <Text style={styles.checkMark}>✓</Text> : null}
       </View>
-      <Text style={styles.consentText}>Acepto que mis datos se usen con fines estadísticos.</Text>
+      <Text
+        style={styles.consentText}
+        accessible={false}>
+        Acepto que mis datos se usen con fines estadísticos.
+      </Text>
     </TouchableOpacity>
   );
 
   const selectsDisabled = optLoading;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.container}>
+    <SafeAreaView
+      style={styles.safe}
+      accessible={true}
+      accessibilityLabel="Pantalla de datos demográficos"
+      accessibilityHint="Aquí puedes seleccionar tu información demográfica para mejorar tu experiencia">
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.container} accessible={false}>
           {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>IA MIND</Text>
-            <Text style={styles.subtitle}>
+          <View
+            style={styles.header}
+            accessible={false}>
+            <Text
+              style={styles.title}
+              accessibilityRole="header"
+              accessible={true}
+              accessibilityLabel="IA MIND">
+              IA MIND
+            </Text>
+            <Text
+              style={styles.subtitle}
+              accessible={true}
+              accessibilityLabel="Esto nos ayuda a brindarte una mejor experiencia">
               Esto nos ayuda a brindarte{'\n'}una mejor experiencia.
             </Text>
           </View>
 
           {/* Loader opciones */}
           {optLoading ? (
-            <View style={styles.loadingBox}>
+            <View
+              style={styles.loadingBox}
+              accessible={true}
+              accessibilityLiveRegion="polite"
+              accessibilityLabel="Cargando opciones">
               <ActivityIndicator color={WHITE} />
               <Text style={styles.loadingText}>Cargando opciones…</Text>
             </View>
           ) : null}
 
           {/* Form */}
-          <View style={styles.form}>
-            <View style={styles.row}>
+          <View style={styles.form} accessible={false}>
+            <View style={styles.row} accessible={false}>
               <View style={styles.col}>
                 <SelectBox
                   label="Año de Nacimiento"
@@ -257,7 +311,7 @@ export default function FormScreen() {
               </View>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.row} accessible={false}>
               <View style={styles.col}>
                 <SelectBox
                   label="Estado de residencia"
@@ -314,13 +368,27 @@ export default function FormScreen() {
           </View>
 
           {/* Footer buttons */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.btnSkip} onPress={onSkip}>
-              <Text style={styles.btnSkipText}>Omitir</Text>
+          <View style={styles.footer} accessible={false}>
+            <TouchableOpacity
+              style={styles.btnSkip}
+              onPress={onSkip}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Omitir"
+              accessibilityHint="Omite este formulario y continúa a la pantalla principal">
+              <Text style={styles.btnSkipText} accessible={false}>Omitir</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.btnNext} onPress={onNext} disabled={optLoading}>
-              <Text style={styles.btnNextText}>Siguiente</Text>
+            <TouchableOpacity
+              style={styles.btnNext}
+              onPress={onNext}
+              disabled={optLoading}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Siguiente"
+              accessibilityHint="Guarda la información seleccionada y continúa"
+              accessibilityState={{ disabled: optLoading, busy: optLoading }}>
+              <Text style={styles.btnNextText} accessible={false}>Siguiente</Text>
             </TouchableOpacity>
           </View>
 
@@ -330,9 +398,25 @@ export default function FormScreen() {
             transparent
             animationType="fade"
             onRequestClose={closeSheet}>
-            <Pressable style={styles.backdrop} onPress={closeSheet}>
-              <Pressable style={styles.sheet} onPress={() => {}}>
-                <Text style={styles.sheetTitle}>{sheet.title}</Text>
+            <Pressable
+              style={styles.backdrop}
+              onPress={closeSheet}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar selector"
+              accessibilityHint="Toca dos veces para cerrar la lista de opciones">
+              <Pressable
+                style={styles.sheet}
+                onPress={() => {}}
+                accessible={true}
+                accessibilityViewIsModal={true}>
+                <Text
+                  style={styles.sheetTitle}
+                  accessibilityRole="header"
+                  accessible={true}
+                  accessibilityLabel={sheet.title}>
+                  {sheet.title}
+                </Text>
 
                 <FlatList
                   data={sheet.options}
@@ -344,14 +428,24 @@ export default function FormScreen() {
                       onPress={() => {
                         sheet.onSelect?.(item.value);
                         closeSheet();
-                      }}>
-                      <Text style={styles.optionText}>{item.label}</Text>
+                      }}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel={item.label}
+                      accessibilityHint="Presiona para seleccionar esta opción">
+                      <Text style={styles.optionText} accessible={false}>{item.label}</Text>
                     </TouchableOpacity>
                   )}
                 />
 
-                <TouchableOpacity style={styles.cancel} onPress={closeSheet}>
-                  <Text style={styles.cancelText}>Cancelar</Text>
+                <TouchableOpacity
+                  style={styles.cancel}
+                  onPress={closeSheet}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancelar"
+                  accessibilityHint="Cierra la lista de opciones sin seleccionar nada">
+                  <Text style={styles.cancelText} accessible={false}>Cancelar</Text>
                 </TouchableOpacity>
               </Pressable>
             </Pressable>

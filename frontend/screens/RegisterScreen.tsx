@@ -25,16 +25,16 @@ const MAX_PASS_LEN = 128;
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 
 const SUSPICIOUS_PATTERNS: RegExp[] = [
-  /(\bor\b|\band\b)\s+(\d+\s*=\s*\d+|true|false|null)\b/i, // or 1=1, and 0=0
+  /(\bor\b|\band\b)\s+(\d+\s*=\s*\d+|true|false|null)\b/i,
   /\bunion\b\s+\bselect\b/i,
   /\bdrop\b\s+(table|database)\b/i,
   /\bdelete\b\s+from\b/i,
   /\binsert\b\s+into\b/i,
   /\bupdate\b\s+\w+\s+\bset\b/i,
-  /--/,          // comentario línea
-  /\/\*|\*\//,   // comentario bloque
-  /;/,           // separador de sentencias
-  /['"`\\]/,     // comillas / backslash
+  /--/,
+  /\/\*|\*\//,
+  /;/,
+  /['"`\\]/,
 ];
 
 function normalizeInput(s: string) {
@@ -67,6 +67,7 @@ function PasswordInput({
   return (
     <View
       className={`w-full flex-row items-center rounded-2xl border border-emerald-700 bg-emerald-800/60 px-3 ${className || ""}`}
+      accessible={false}
     >
       <TextInput
         value={value}
@@ -81,11 +82,21 @@ function PasswordInput({
         className="flex-1 py-4 px-2 text-white"
         testID={testID ? `${testID}-input` : undefined}
         maxLength={MAX_PASS_LEN}
+        accessible={true}
+        accessibilityLabel={placeholder}
+        accessibilityHint={
+          show
+            ? `Campo ${placeholder.toLowerCase()} visible`
+            : `Campo ${placeholder.toLowerCase()} oculto`
+        }
+        importantForAccessibility="yes"
       />
       <TouchableOpacity
         onPress={() => setShow(!show)}
         accessibilityRole="button"
         accessibilityLabel={show ? "Ocultar contraseña" : "Mostrar contraseña"}
+        accessibilityHint="Presiona para alternar la visibilidad de la contraseña"
+        accessibilityState={{ expanded: show }}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         testID={testID ? `${testID}-toggle` : undefined}
       >
@@ -104,12 +115,10 @@ export default function RegisterScreen({ navigation }: any) {
   const passwordsMatch = password.length > 0 && password === passwordConfirm;
 
   const onRegister = async () => {
-    // Normaliza entradas
     const emailN = normalizeInput(email);
     const passN = normalizeInput(password);
     const passCN = normalizeInput(passwordConfirm);
 
-    // Reglas mínimas
     if (!emailN || !passN) {
       Alert.alert("Campos requeridos", "Ingresa tu correo y contraseña.");
       return;
@@ -127,7 +136,6 @@ export default function RegisterScreen({ navigation }: any) {
       return;
     }
 
-    // Bloqueo de patrones sospechosos
     if (hasSuspiciousPayload(emailN) || hasSuspiciousPayload(passN)) {
       Alert.alert("Entrada no permitida", "Se detectaron patrones no permitidos.");
       return;
@@ -146,7 +154,6 @@ export default function RegisterScreen({ navigation }: any) {
             {
               text: "Aceptar",
               onPress: () => {
-                // No pases password a otras pantallas
                 setPassword("");
                 setPasswordConfirm("");
                 navigation.navigate("Login", { initialMessage: emailN });
@@ -169,7 +176,6 @@ export default function RegisterScreen({ navigation }: any) {
       const response = await fetch("https://api.aimind.portablelab.work/api/v1/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // credentials: 'include' as any, // si tu backend setea cookies en registro
         body: JSON.stringify({ email, password }),
       });
 
@@ -202,23 +208,37 @@ export default function RegisterScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-emerald-900">
+    <SafeAreaView
+      className="flex-1 bg-emerald-900"
+      accessible={true}
+      accessibilityLabel="Pantalla de registro"
+      accessibilityHint="Aquí puedes crear tu cuenta con correo y contraseña"
+    >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAwareScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ flexGrow: 1 }}
+          accessible={false}
         >
           <View className="flex-1 px-6">
-            {/* Título */}
-            <View className="items-center mt-6 mb-10 pt-10">
+            <View
+              className="items-center mt-6 mb-10 pt-10"
+              accessible={true}
+              accessibilityRole="header"
+              accessibilityLabel="IA MIND"
+            >
               <Text className="text-white text-5xl font-extrabold tracking-widest">
                 IA MIND
               </Text>
             </View>
 
-            {/* Formulario */}
-            <View className="gap-4 flex-1 justify-center">
-              <Text className="text-white text-3xl font-extrabold mb-2">
+            <View className="gap-4 flex-1 justify-center" accessible={false}>
+              <Text
+                className="text-white text-3xl font-extrabold mb-2"
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="Crea tu cuenta"
+              >
                 Crea tu cuenta
               </Text>
 
@@ -234,6 +254,10 @@ export default function RegisterScreen({ navigation }: any) {
                 autoCorrect={false}
                 editable={!loading}
                 maxLength={MAX_EMAIL_LEN}
+                accessible={true}
+                accessibilityLabel="Correo electrónico"
+                accessibilityHint="Ingresa tu correo electrónico para registrarte"
+                importantForAccessibility="yes"
               />
 
               <PasswordInput
@@ -251,7 +275,16 @@ export default function RegisterScreen({ navigation }: any) {
               />
 
               {passwordConfirm.length > 0 && (
-                <Text className={`text-sm ${passwordsMatch ? "text-emerald-300" : "text-red-300"}`}>
+                <Text
+                  className={`text-sm ${passwordsMatch ? "text-emerald-300" : "text-red-300"}`}
+                  accessible={true}
+                  accessibilityLiveRegion="polite"
+                  accessibilityLabel={
+                    passwordsMatch
+                      ? "Las contraseñas coinciden"
+                      : "Las contraseñas no coinciden"
+                  }
+                >
                   {passwordsMatch ? "✔ Las contraseñas coinciden" : "✖ Las contraseñas no coinciden"}
                 </Text>
               )}
@@ -264,9 +297,24 @@ export default function RegisterScreen({ navigation }: any) {
                     ? "bg-white/50"
                     : "bg-white"
                 }`}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={loading ? "Registrando cuenta" : "Registrarse"}
+                accessibilityHint="Presiona para crear tu cuenta"
+                accessibilityState={{
+                  disabled: !email || !password || !passwordsMatch || loading,
+                  busy: loading,
+                }}
               >
                 {loading ? (
-                  <ActivityIndicator />
+                  <View
+                    accessible={true}
+                    accessibilityLiveRegion="polite"
+                    accessibilityLabel="Cargando"
+                    accessibilityHint="Se está procesando el registro"
+                  >
+                    <ActivityIndicator />
+                  </View>
                 ) : (
                   <Text className="text-emerald-900 text-xl font-extrabold">
                     Registrarse
@@ -275,13 +323,22 @@ export default function RegisterScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            {/* Link a login */}
-            <View className="mt-auto mb-6 items-center">
-              <View className="flex-row items-center">
-                <Text className="text-white/80 text-base">¿Ya tienes una cuenta?</Text>
+            <View className="mt-auto mb-6 items-center" accessible={false}>
+              <View className="flex-row items-center" accessible={false}>
+                <Text
+                  className="text-white/80 text-base"
+                  accessible={true}
+                  accessibilityLabel="¿Ya tienes una cuenta?"
+                >
+                  ¿Ya tienes una cuenta?
+                </Text>
                 <TouchableOpacity
                   onPress={() => navigation.navigate("Login")}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="Inicia sesión"
+                  accessibilityHint="Abre la pantalla para iniciar sesión"
                 >
                   <Text className="text-white text-base font-bold ml-2 underline">
                     Inicia Sesión

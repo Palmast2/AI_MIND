@@ -19,8 +19,12 @@ import ModificarContacto from 'screens/screensOptions/screensContactoEmergencia/
 import MenuContactoEmergencia from 'screens/screensOptions/screensContactoEmergencia/MenuContactoEmergencia';
 import InfoPersonal from 'screens/screensOptions/screenInformacionPersonal/InfoPersonal';
 import ListaContactosEmergencia from 'screens/ListContactosEmergency';
+import ListaPsicologo from 'screens/screensOptions/screensContactoEmergencia/ListaPsicologo';
+import ModificarPsicologo from 'screens/screensOptions/screensContactoEmergencia/ModificarPsicologo';
 import { StatusBar } from 'expo-status-bar';
 import './global.css';
+
+
 
 const Stack = createNativeStackNavigator();
 
@@ -51,9 +55,10 @@ export default function App() {
         <Stack.Screen name="OptionsMenuContactoEmergencia" component={MenuContactoEmergencia} options={{title: "Contactos de Emergencia"}}/>
         <Stack.Screen name="OptionsInfoContacto" component={InfoContacto} options={{title: "Informacion de Contacto"}}/>
         <Stack.Screen name="OptionsInfoPsicologo" component={InfoPsicologo} options={{title: "Informacion de Psicologo"}}/>
+        <Stack.Screen name="OptionsListaPsicologo" component={ListaPsicologo} options={{title: "Lista de Psicologos"}}/>
         <Stack.Screen name="OptionsListaContacto" component={ListaContactos} options={{title: "Lista de Contacto"}}/>
         <Stack.Screen name="OptionsModificarContacto" component={ModificarContacto} options={{title: "Modificar Contacto"}}/>
-
+        <Stack.Screen name="OptionsModificarPsicologo" component={ModificarPsicologo} options={{title: "Modificar Contacto"}}/>
       </Stack.Navigator>
       <StatusBar style="auto" />
     </NavigationContainer>

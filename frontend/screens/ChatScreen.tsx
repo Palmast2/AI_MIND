@@ -298,20 +298,20 @@ export default function ChatScreen({ route, navigation }: any) {
   }, []);
 
   const callEmergencyContact = async (phone: string | number) => {
-  try {
-    const cleanPhone = String(phone ?? '').replace(/[^\d+]/g, '');
+    try {
+      const cleanPhone = String(phone ?? '').replace(/[^\d+]/g, '');
 
-    if (!cleanPhone) {
-      Alert.alert('Error', 'No se encontró un número válido.');
-      return;
+      if (!cleanPhone) {
+        Alert.alert('Error', 'No se encontró un número válido.');
+        return;
+      }
+
+      await Linking.openURL(`tel:${cleanPhone}`);
+    } catch (error) {
+      console.error('callEmergencyContact error:', error);
+      Alert.alert('Error', 'No se pudo abrir la llamada.');
     }
-
-    await Linking.openURL(`tel:${cleanPhone}`);
-  } catch (error) {
-    console.error('callEmergencyContact error:', error);
-    Alert.alert('Error', 'No se pudo abrir la llamada.');
-  }
-};
+  };
 
   const goToContactsScreen = useCallback(() => {
     setCrisisModalVisible(false);
@@ -761,12 +761,16 @@ export default function ChatScreen({ route, navigation }: any) {
         <View
           className={`my-1 max-w-[85%] flex-row items-end gap-2 ${
             isUser ? 'self-end' : 'self-start'
-          }`}>
+          }`}
+          accessible={false}>
           {!isUser && (
             <Image
               source={imageSource}
               style={{ width: 48, height: 48, borderRadius: 14 }}
               resizeMode="contain"
+              accessible={true}
+              accessibilityRole="image"
+              accessibilityLabel="Avatar del asistente"
             />
           )}
 
@@ -774,8 +778,20 @@ export default function ChatScreen({ route, navigation }: any) {
             className={`max-w-[80%] rounded-2xl px-3 py-2 shadow ${
               isUser ? 'bg-[#DCF8C6]' : 'bg-white'
             }`}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity onPress={() => playAudio(item.uri)} style={{ padding: 6 }}>
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+            accessible={true}
+            accessibilityRole="summary"
+            accessibilityLabel={`Mensaje de audio ${isUser ? 'enviado por ti' : 'del asistente'}${
+              item.durationSec != null ? `, duración ${formatTime(item.durationSec)}` : ''
+            }`}>
+            <TouchableOpacity
+              onPress={() => playAudio(item.uri)}
+              style={{ padding: 6 }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={isPlaying ? 'Pausar audio' : 'Reproducir audio'}
+              accessibilityHint="Presiona para controlar la reproducción del audio"
+              accessibilityState={{ selected: isPlaying }}>
               {isPlaying ? (
                 <PauseIcon size={22} color="black" />
               ) : (
@@ -783,7 +799,12 @@ export default function ChatScreen({ route, navigation }: any) {
               )}
             </TouchableOpacity>
 
-            <Text className="text-[16px] text-[#0F0F0F]">
+            <Text
+              className="text-[16px] text-[#0F0F0F]"
+              accessible={true}
+              accessibilityLabel={`Audio ${
+                item.durationSec != null ? `de ${formatTime(item.durationSec)}` : ''
+              }`}>
               Audio {item.durationSec != null ? `(${formatTime(item.durationSec)})` : ''}
             </Text>
           </View>
@@ -793,20 +814,31 @@ export default function ChatScreen({ route, navigation }: any) {
 
     if (isUser) {
       return (
-        <View className="my-1 max-w-[80%] self-end rounded-2xl bg-[#DCF8C6] px-3 py-2 shadow">
+        <View
+          className="my-1 max-w-[80%] self-end rounded-2xl bg-[#DCF8C6] px-3 py-2 shadow"
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel={`Tu mensaje: ${item.text}`}>
           <Text className="text-[16px] text-[#0F0F0F]">{item.text}</Text>
         </View>
       );
     }
 
     return (
-      <View className="my-1 max-w-[85%] flex-row items-end gap-2 self-start">
+      <View className="my-1 max-w-[85%] flex-row items-end gap-2 self-start" accessible={false}>
         <Image
           source={imageSource}
           style={{ width: 48, height: 48, borderRadius: 14 }}
           resizeMode="contain"
+          accessible={true}
+          accessibilityRole="image"
+          accessibilityLabel="Avatar del asistente"
         />
-        <View className="max-w-[85%] rounded-2xl bg-white px-3 py-2 shadow">
+        <View
+          className="max-w-[85%] rounded-2xl bg-white px-3 py-2 shadow"
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel={`Mensaje del asistente: ${item.text}`}>
           <Text className="text-[16px] text-[#0F0F0F]">{item.text}</Text>
         </View>
       </View>
@@ -817,8 +849,12 @@ export default function ChatScreen({ route, navigation }: any) {
     () => (
       <>
         {loading && (
-          <View className="mb-2 items-start">
-            <View className="max-w-[60%] flex-row items-center rounded-2xl bg-white px-3 py-2">
+          <View className="mb-2 items-start" accessible={true} accessibilityLiveRegion="polite">
+            <View
+              className="max-w-[60%] flex-row items-center rounded-2xl bg-white px-3 py-2"
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLabel={pendingType === 'audio' ? 'Escuchando' : 'Pensando'}>
               <ActivityIndicator size="small" />
               <Text className="ml-2 text-[#0F0F0F]">
                 {pendingType === 'audio' ? 'Escuchando…' : 'Pensando…'}
@@ -828,7 +864,7 @@ export default function ChatScreen({ route, navigation }: any) {
         )}
 
         {composerMode === 'record' ? (
-          <View style={{ width: '100%', marginTop: 8, gap: 8 }}>
+          <View style={{ width: '100%', marginTop: 8, gap: 8 }} accessible={false}>
             <View
               style={{
                 width: '100%',
@@ -840,7 +876,10 @@ export default function ChatScreen({ route, navigation }: any) {
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: 10,
-              }}>
+              }}
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLabel={`Grabación en curso, tiempo ${formatTime(recordSeconds)}`}>
               <VoiceIcon size={22} color="#00634C" />
               <Text style={{ color: '#4A4A4A', fontSize: 18, fontWeight: '600' }}>
                 {formatTime(recordSeconds)}
@@ -860,18 +899,29 @@ export default function ChatScreen({ route, navigation }: any) {
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-              }}>
+              }}
+              accessible={false}>
               <TouchableOpacity
                 onPress={deleteRecording}
                 disabled={loading}
-                style={{ padding: 10 }}>
+                style={{ padding: 10 }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Eliminar grabación"
+                accessibilityHint="Borra el audio grabado"
+                accessibilityState={{ disabled: loading }}>
                 <DeleteIcon size={24} color="black" />
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={isPaused ? resumeRecording : pauseRecording}
                 disabled={loading}
-                style={{ padding: 10 }}>
+                style={{ padding: 10 }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
+                accessibilityHint="Controla la grabación de audio"
+                accessibilityState={{ disabled: loading }}>
                 {isPaused ? (
                   <PlayIcon size={28} color="black" />
                 ) : (
@@ -882,7 +932,12 @@ export default function ChatScreen({ route, navigation }: any) {
               <TouchableOpacity
                 onPress={onSendRecording}
                 disabled={loading}
-                style={{ padding: 10 }}>
+                style={{ padding: 10 }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Enviar grabación"
+                accessibilityHint="Envía el audio grabado"
+                accessibilityState={{ disabled: loading }}>
                 <SendIcon size={24} color="black" />
               </TouchableOpacity>
             </View>
@@ -894,7 +949,8 @@ export default function ChatScreen({ route, navigation }: any) {
               alignItems: 'stretch',
               width: '100%',
               marginTop: 8,
-            }}>
+            }}
+            accessible={false}>
             <View
               style={{
                 flex: 1,
@@ -909,7 +965,8 @@ export default function ChatScreen({ route, navigation }: any) {
                 flexDirection: 'row',
                 alignItems: 'center',
                 minHeight: 56,
-              }}>
+              }}
+              accessible={false}>
               <TextInput
                 ref={inputRef}
                 placeholder="¿Cómo ha estado tu día?"
@@ -931,6 +988,9 @@ export default function ChatScreen({ route, navigation }: any) {
                 blurOnSubmit={false}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
+                accessible={true}
+                accessibilityLabel="Mensaje"
+                accessibilityHint="Escribe aquí cómo te sientes o qué deseas hablar"
               />
 
               <TouchableOpacity
@@ -944,7 +1004,12 @@ export default function ChatScreen({ route, navigation }: any) {
                   paddingHorizontal: 12,
                   paddingVertical: 8,
                   borderRadius: 20,
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Enviar mensaje"
+                accessibilityHint="Envía el mensaje escrito"
+                accessibilityState={{ disabled: !text.trim() || loading }}>
                 <Text style={{ color: 'white', fontWeight: '600' }}>Enviar</Text>
               </TouchableOpacity>
             </View>
@@ -962,13 +1027,18 @@ export default function ChatScreen({ route, navigation }: any) {
                 justifyContent: 'center',
                 paddingHorizontal: 12,
                 elevation: 3,
-              }}>
+              }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Iniciar grabación de voz"
+              accessibilityHint="Comienza a grabar un mensaje de audio"
+              accessibilityState={{ disabled: loading }}>
               <VoiceIcon size={24} color="black" />
             </TouchableOpacity>
           </View>
         )}
 
-        <View style={{ height: insets.bottom }} />
+        <View style={{ height: insets.bottom }} accessible={false} />
       </>
     ),
     [
@@ -992,8 +1062,12 @@ export default function ChatScreen({ route, navigation }: any) {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-[#00634C]">
-      <View className="flex-1 px-4" style={{ paddingTop: 8, paddingBottom: 8 }}>
+    <SafeAreaView
+      className="flex-1 bg-[#00634C]"
+      accessible={true}
+      accessibilityLabel="Pantalla de chat"
+      accessibilityHint="Aquí puedes conversar por texto o audio">
+      <View className="flex-1 px-4" style={{ paddingTop: 8, paddingBottom: 8 }} accessible={false}>
         <KeyboardAwareFlatList
           ref={listRef}
           data={messages}
@@ -1012,6 +1086,8 @@ export default function ChatScreen({ route, navigation }: any) {
           extraScrollHeight={Platform.OS === 'android' ? 0 : isFocused ? 190 : 90}
           extraHeight={Platform.OS === 'android' ? 0 : isFocused ? 145 : 45}
           onContentSizeChange={scrollToEnd}
+          accessible={true}
+          accessibilityLabel="Lista de mensajes"
         />
       </View>
 
@@ -1027,7 +1103,10 @@ export default function ChatScreen({ route, navigation }: any) {
             justifyContent: 'center',
             alignItems: 'center',
             padding: 20,
-          }}>
+          }}
+          accessible={true}
+          accessibilityViewIsModal={true}
+          accessibilityLabel="Ventana de apoyo emocional">
           <View
             style={{
               width: '100%',
@@ -1038,15 +1117,21 @@ export default function ChatScreen({ route, navigation }: any) {
               borderBlockColor: 'white',
               borderWidth: 5,
               borderColor: 'rgba(255,255,255,0.18)',
-            }}>
+            }}
+            accessible={false}>
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 marginBottom: 18,
-              }}>
-              <Text style={{ color: 'white', fontSize: 24, fontWeight: '700', flex: 1 }}>
+              }}
+              accessible={false}>
+              <Text
+                style={{ color: 'white', fontSize: 24, fontWeight: '700', flex: 1 }}
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="Respiremos un poco">
                 Respiremos un poco
               </Text>
 
@@ -1054,6 +1139,9 @@ export default function ChatScreen({ route, navigation }: any) {
                 source={require('../assets/perro/comprension.png')}
                 style={{ width: 72, height: 72, marginLeft: 12 }}
                 resizeMode="contain"
+                accessible={true}
+                accessibilityRole="image"
+                accessibilityLabel="Ilustración de apoyo emocional"
               />
             </View>
 
@@ -1063,14 +1151,20 @@ export default function ChatScreen({ route, navigation }: any) {
                 fontSize: 16,
                 lineHeight: 24,
                 marginBottom: 18,
-              }}>
+              }}
+              accessible={true}
+              accessibilityLabel="Respira, esto que estás sintiendo es muy intenso, pero no tienes que cargarlo solo o sola. Está bien detenerte un momento y darte espacio. Si lo necesitas, puedes buscar a alguien de confianza y hablar con esa persona ahora.">
               Respira, esto que estás sintiendo es muy intenso, pero no tienes que cargarlo solo/a.
               Está bien detenerte un momento y darte espacio. Si lo necesitas, puedes buscar a
               alguien de confianza y hablar con esa persona ahora.
             </Text>
 
             {loadingEmergencyContacts ? (
-              <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+              <View
+                style={{ paddingVertical: 10, alignItems: 'center' }}
+                accessible={true}
+                accessibilityLiveRegion="polite"
+                accessibilityLabel="Cargando contactos de emergencia">
                 <ActivityIndicator color="#fff" />
               </View>
             ) : (
@@ -1079,7 +1173,8 @@ export default function ChatScreen({ route, navigation }: any) {
                   flexDirection: 'row',
                   justifyContent: 'space-between',
                   alignItems: 'stretch',
-                }}>
+                }}
+                accessible={false}>
                 {emergencyContacts.slice(0, 3).map((contact, index, arr) => {
                   const total = arr.length;
 
@@ -1097,7 +1192,11 @@ export default function ChatScreen({ route, navigation }: any) {
                         paddingHorizontal: 10,
                         alignItems: 'center',
                         justifyContent: 'center',
-                      }}>
+                      }}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel={contact.alias || contact.nombre}
+                      accessibilityHint="Llamar a este contacto de emergencia">
                       <Text
                         numberOfLines={1}
                         style={{
@@ -1114,7 +1213,7 @@ export default function ChatScreen({ route, navigation }: any) {
               </View>
             )}
 
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }} accessible={false}>
               <TouchableOpacity
                 onPress={goToContactsScreen}
                 style={{
@@ -1124,7 +1223,11 @@ export default function ChatScreen({ route, navigation }: any) {
                   paddingVertical: 14,
                   alignItems: 'center',
                   justifyContent: 'center',
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Lista de contactos"
+                accessibilityHint="Abrir la pantalla de contactos de emergencia">
                 <Text style={{ color: '#00634C', fontWeight: '700' }}>Lista de contactos</Text>
               </TouchableOpacity>
 
@@ -1142,7 +1245,11 @@ export default function ChatScreen({ route, navigation }: any) {
                   justifyContent: 'center',
                   borderWidth: 1.5,
                   borderColor: 'white',
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Estoy bien, puedo seguir"
+                accessibilityHint="Cerrar esta ventana y continuar">
                 <Text style={{ color: 'white', fontWeight: '700', textAlign: 'center' }}>
                   Estoy Bien, Puedo Seguir
                 </Text>
@@ -1164,7 +1271,10 @@ export default function ChatScreen({ route, navigation }: any) {
             justifyContent: 'center',
             alignItems: 'center',
             padding: 20,
-          }}>
+          }}
+          accessible={true}
+          accessibilityViewIsModal={true}
+          accessibilityLabel="Ventana de recordatorio">
           <View
             style={{
               width: '100%',
@@ -1175,15 +1285,21 @@ export default function ChatScreen({ route, navigation }: any) {
               borderBlockColor: 'white',
               borderWidth: 5,
               borderColor: 'rgba(255,255,255,0.18)',
-            }}>
+            }}
+            accessible={false}>
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 marginBottom: 18,
-              }}>
-              <Text style={{ color: 'white', fontSize: 24, fontWeight: '700', flex: 1 }}>
+              }}
+              accessible={false}>
+              <Text
+                style={{ color: 'white', fontSize: 24, fontWeight: '700', flex: 1 }}
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="Recuerda">
                 Recuerda
               </Text>
 
@@ -1191,6 +1307,9 @@ export default function ChatScreen({ route, navigation }: any) {
                 source={require('../assets/perro/main.png')}
                 style={{ width: 72, height: 72, marginLeft: 12 }}
                 resizeMode="contain"
+                accessible={true}
+                accessibilityRole="image"
+                accessibilityLabel="Ilustración de apoyo"
               />
             </View>
 
@@ -1200,13 +1319,15 @@ export default function ChatScreen({ route, navigation }: any) {
                 fontSize: 16,
                 lineHeight: 24,
                 marginBottom: 18,
-              }}>
+              }}
+              accessible={true}
+              accessibilityLabel="Me alegra saber que estás bien. Aun así, si en algún momento necesitas apoyo y no quieres hablar con alguien cercano, también puedes acudir a un servicio de emergencia o línea de ayuda. Lo importante es que no estés solo o sola con eso.">
               Me alegra saber que estás bien. Aun así, si en algún momento necesitas apoyo y no
               quieres hablar con alguien cercano, también puedes acudir a un servicio de emergencia
               o línea de ayuda. Lo importante es que no estés solo/a con eso.
             </Text>
 
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flexDirection: 'row', gap: 10 }} accessible={false}>
               <TouchableOpacity
                 onPress={goToContactsScreen}
                 style={{
@@ -1216,7 +1337,11 @@ export default function ChatScreen({ route, navigation }: any) {
                   paddingVertical: 14,
                   alignItems: 'center',
                   justifyContent: 'center',
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Contactos de emergencia"
+                accessibilityHint="Abrir la pantalla de contactos de emergencia">
                 <Text style={{ color: '#00634C', fontWeight: '700' }}>Contactos de Emergencia</Text>
               </TouchableOpacity>
 
@@ -1231,7 +1356,11 @@ export default function ChatScreen({ route, navigation }: any) {
                   justifyContent: 'center',
                   borderWidth: 1.5,
                   borderColor: 'white',
-                }}>
+                }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Estoy bien"
+                accessibilityHint="Cerrar esta ventana">
                 <Text style={{ color: 'white', fontWeight: '700' }}>Estoy Bien</Text>
               </TouchableOpacity>
             </View>
