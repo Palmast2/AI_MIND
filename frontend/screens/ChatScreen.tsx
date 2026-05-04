@@ -56,6 +56,8 @@ export default function ChatScreen({ route, navigation }: any) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [composerHeight, setComposerHeight] = useState(72);
   const [pendingType, setPendingType] = useState<'text' | 'audio' | null>(null);
 
   const [skinKey, setSkinKey] = useState<keyof typeof SKINS>('default');
@@ -83,6 +85,9 @@ export default function ChatScreen({ route, navigation }: any) {
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
+
+  const composerBottom = keyboardHeight > 0 ? keyboardHeight + 8 : insets.bottom + 8;
+  const listBottomPadding = composerHeight + composerBottom + 16;
 
   const stopRecordTimer = useCallback(() => {
     if (recordTimerRef.current) {
@@ -124,13 +129,45 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   }, []);
 
-  const scrollToEnd = useCallback(() => {
+  const scrollToEnd = useCallback((animated = true) => {
     requestAnimationFrame(() => {
-      (listRef.current as any)?.scrollToOffset?.({
+      const list = listRef.current as any;
+
+      if (list?.scrollToEnd) {
+        list.scrollToEnd({ animated });
+        return;
+      }
+
+      list?.scrollToOffset?.({
         offset: 999999,
-        animated: true,
+        animated,
       });
     });
+  }, []);
+
+  useEffect(() => {
+    scrollToEnd(true);
+  }, [messages.length, loading, keyboardHeight, composerHeight, scrollToEnd]);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = (e: any) => {
+      setKeyboardHeight(e.endCoordinates?.height ?? 0);
+    };
+
+    const onHide = () => {
+      setKeyboardHeight(0);
+    };
+
+    const showSub = Keyboard.addListener(showEvt, onShow);
+    const hideSub = Keyboard.addListener(hideEvt, onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   const getAccessToken = async (): Promise<string> => {
@@ -845,6 +882,8 @@ export default function ChatScreen({ route, navigation }: any) {
     );
   };
 
+  const bottomSpacer = keyboardHeight > 0 ? keyboardHeight + 12 : insets.bottom;
+
   const ListFooter = useMemo(
     () => (
       <>
@@ -1038,14 +1077,14 @@ export default function ChatScreen({ route, navigation }: any) {
           </View>
         )}
 
-        <View style={{ height: insets.bottom }} accessible={false} />
+        <View style={{ height: bottomSpacer }} accessible={false} />
       </>
     ),
     [
       loading,
       pendingType,
       text,
-      insets.bottom,
+      bottomSpacer,
       handleFocus,
       handleBlur,
       sendMessage,
