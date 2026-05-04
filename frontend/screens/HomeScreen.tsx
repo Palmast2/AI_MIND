@@ -643,6 +643,7 @@ export default function HomeScreen({ navigation }: any) {
 
   // Tamaño del composer para no tapar contenido
   const [composerHeight, setComposerHeight] = useState(72);
+  const composerBottom = keyboardHeight > 0 ? keyboardHeight + 8 : insets.bottom + 8;
 
   return (
     <SafeAreaView
@@ -712,7 +713,7 @@ export default function HomeScreen({ navigation }: any) {
               position: 'absolute',
               left: 16,
               right: 16,
-              bottom: insets.bottom + 8,
+              bottom: composerBottom,
             }}
             accessible={false}>
             {composerMode === 'record' ? (
@@ -888,7 +889,7 @@ export default function HomeScreen({ navigation }: any) {
             position: 'absolute',
             left: 16,
             right: 16,
-            bottom: insets.bottom + 8,
+            bottom: composerBottom,
           }}
           accessible={false}>
           {composerMode === 'record' ? (
